@@ -81,3 +81,31 @@ def test_rotation_create(conn):
                               derived_from=["an_1"])
     assert store.list_rotations(conn)[0]["name"] == "单体稳定输出"
     assert r["derived_from"] == ["an_1"]
+
+
+def test_pattern_ms_must_be_int(conn):
+    with pytest.raises(ValueError):
+        store.create_skill(conn, name="坏4", pattern=[{"op": "gap", "ms": None}])
+    with pytest.raises(ValueError):
+        store.create_skill(conn, name="坏5", pattern=[{"op": "gap", "ms": "300"}])
+    with pytest.raises(ValueError):
+        store.create_skill(conn, name="坏6", pattern=[{"op": "hold", "key": "F", "ms": None}])
+
+
+def test_duplicate_skill_name_raises_value_error(conn):
+    store.create_skill(conn, name="重复", pattern=[])
+    with pytest.raises(ValueError):
+        store.create_skill(conn, name="重复", pattern=[])
+
+
+def test_delete_pending_proposals_keeps_adjudicated(conn):
+    v = store.create_video(conn, name="a.mp4", source_kind="upload")
+    tree = store.create_analysis(conn, v["id"])
+    p1 = store.create_proposal(conn, analysis_id=tree["id"], kind="rotation",
+                               payload={"name": "a", "body": []}, report={})
+    p2 = store.create_proposal(conn, analysis_id=tree["id"], kind="rotation",
+                               payload={"name": "b", "body": []}, report={})
+    store.set_proposal_status(conn, p1["id"], "accepted")
+    assert store.delete_pending_proposals(conn, tree["id"], kind="rotation") == 1
+    remaining = store.list_proposals(conn, tree["id"])
+    assert [p["status"] for p in remaining] == ["accepted"]

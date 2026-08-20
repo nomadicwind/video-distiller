@@ -256,3 +256,36 @@ def test_discover_endpoint_persists_proposals(client, analysis, monkeypatch):
 
 def test_infer_404(client):
     assert client.post("/api/analyses/nope/infer").status_code == 404
+
+
+def test_duplicate_skill_name_is_400(client):
+    client.post("/api/skills", json={"name": "唯一技", "pattern": []})
+    r = client.post("/api/skills", json={"name": "唯一技", "pattern": []})
+    assert r.status_code == 400
+
+
+def test_discover_supersedes_pending(client, analysis, monkeypatch):
+    from test_agent import FakeClient, FakeResponse
+    from vd import api as api_module
+    monkeypatch.setattr(api_module, "_agent_client", lambda: FakeClient(FakeResponse()))
+    from test_api import _seed_rotation_annotation
+    _seed_rotation_annotation(client, analysis)
+    n1 = len(client.post(f"/api/analyses/{analysis['id']}/discover").json()["proposals"])
+    client.post(f"/api/analyses/{analysis['id']}/discover")
+    stored = client.get(f"/api/analyses/{analysis['id']}/proposals").json()
+    assert len([p for p in stored if p["status"] == "pending"]) == n1   # 不累积
+
+
+def test_accept_creates_rotation_before_status(client, analysis):
+    from vd import db, store
+    conn = db.connect()
+    p = store.create_proposal(conn, analysis_id=analysis["id"], kind="rotation",
+                              payload={"note": "缺 name 和 body"}, report={})
+    conn.close()
+    r = client.post(f"/api/proposals/{p['id']}/accept")
+    assert r.status_code == 500                       # 畸形 payload 仍失败……
+    conn = db.connect()
+    fresh = store.list_proposals(conn, analysis["id"])
+    conn.close()
+    bad = [x for x in fresh if x["id"] == p["id"]][0]
+    assert bad["status"] == "pending"                 # ……但状态未被卡死，可重试/拒绝

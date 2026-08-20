@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 from typing import Iterator, Literal
@@ -326,16 +327,20 @@ def proposals(analysis_id: str, conn=Depends(get_conn)):
 
 @app.post("/api/proposals/{proposal_id}/accept")
 def accept_proposal(proposal_id: str, conn=Depends(get_conn)):
-    row = conn.execute("SELECT status FROM proposals WHERE id=?", (proposal_id,)).fetchone()
+    row = conn.execute("SELECT * FROM proposals WHERE id=?", (proposal_id,)).fetchone()
     if row is None:
         raise HTTPException(404)
     if row["status"] != "pending":
         raise HTTPException(409, "proposal 已裁决")
+    payload = json.loads(row["payload"])
+    try:
+        rotation = store.create_rotation(
+            conn, name=payload["name"], body=payload["body"],
+            params=payload.get("params"), note=payload.get("note"),
+            derived_from=[row["analysis_id"]])
+    except (KeyError, ValueError, TypeError) as e:
+        raise HTTPException(500, str(e))
     p = store.set_proposal_status(conn, proposal_id, "accepted")
-    rotation = store.create_rotation(
-        conn, name=p["payload"]["name"], body=p["payload"]["body"],
-        params=p["payload"].get("params"), note=p["payload"].get("note"),
-        derived_from=[p["analysis_id"]])
     return {"proposal": p, "rotation": rotation}
 
 
@@ -399,6 +404,7 @@ def run_infer(analysis_id: str, conn=Depends(get_conn)):
 @app.post("/api/analyses/{analysis_id}/discover")
 def run_discover(analysis_id: str, conn=Depends(get_conn)):
     _, l0_ops, _, skills, _ = _analysis_inputs(conn, analysis_id)
+    store.delete_pending_proposals(conn, analysis_id, kind="rotation")
     matched = matcher.match_all(l0_ops, skills)
     skill_names = {s["id"]: s["name"] for s in skills}
     results = []

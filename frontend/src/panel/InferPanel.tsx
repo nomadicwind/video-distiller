@@ -18,6 +18,7 @@ export function InferPanel() {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   useEffect(() => { void api.listSkills().then(setSkills) }, [])
+  useEffect(() => { if (analysis) void api.listProposals(analysis.id).then(setProposals) }, [analysis?.id])
 
   if (!analysis) return null
   const names = new Map(skills.map(s => [s.id, s.name]))

@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 
@@ -187,8 +188,14 @@ def validate_pattern(pattern: list) -> None:
             raise ValueError("chord requires keys")
         if op == "gap" and "ms" not in item:
             raise ValueError("gap requires ms")
+        if op == "gap" and not isinstance(item.get("ms"), int):
+            raise ValueError("gap requires integer ms")
         if op == "skill" and not item.get("ref"):
             raise ValueError("skill requires ref")
+        if op == "hold" and "ms" in item and not isinstance(item["ms"], int):
+            raise ValueError("hold ms must be integer")
+        if "tol_ms" in item and not isinstance(item["tol_ms"], int):
+            raise ValueError("tol_ms must be integer")
 
 
 def skill_layer(skill: dict) -> str:
@@ -210,12 +217,15 @@ def create_skill(conn, *, name, class_=None, cd_ms=None, cast_ms=None,
     pattern = pattern or []
     validate_pattern(pattern)
     sid = _id("sk")
-    conn.execute(
-        "INSERT INTO skills(id,name,class,cd_ms,cast_ms,anim_ms,cancelable,pattern,created_at)"
-        " VALUES(?,?,?,?,?,?,?,?,?)",
-        (sid, name, class_, cd_ms, cast_ms, anim_ms, int(cancelable),
-         json.dumps(pattern, ensure_ascii=False), _now()),
-    )
+    try:
+        conn.execute(
+            "INSERT INTO skills(id,name,class,cd_ms,cast_ms,anim_ms,cancelable,pattern,created_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?)",
+            (sid, name, class_, cd_ms, cast_ms, anim_ms, int(cancelable),
+             json.dumps(pattern, ensure_ascii=False), _now()),
+        )
+    except sqlite3.IntegrityError as e:
+        raise ValueError(f"技能名重复：{name}") from e
     conn.commit()
     return get_skill(conn, sid)
 
@@ -345,3 +355,11 @@ def create_rotation(conn, *, name, body, params=None, note=None, derived_from=No
 def list_rotations(conn):
     return [_rotation_row(r) for r in conn.execute(
         "SELECT * FROM rotations ORDER BY created_at")]
+
+
+def delete_pending_proposals(conn, analysis_id, kind) -> int:
+    cur = conn.execute(
+        "DELETE FROM proposals WHERE analysis_id=? AND status='pending' AND kind=?",
+        (analysis_id, kind))
+    conn.commit()
+    return cur.rowcount

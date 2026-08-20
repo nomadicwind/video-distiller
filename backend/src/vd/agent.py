@@ -34,8 +34,8 @@ def describe_candidate(candidate: dict, skill_names: dict[str, str]) -> str:
 
 def name_candidate(candidate: dict, skill_names: dict[str, str],
                    client=None) -> dict:
-    client = client or anthropic.Anthropic()
     try:
+        client = client or anthropic.Anthropic()
         response = client.messages.parse(
             model=MODEL,
             max_tokens=2048,
