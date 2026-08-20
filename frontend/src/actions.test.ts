@@ -34,6 +34,7 @@ const tree: AnalysisTree = {
       marks: [{ id: 'm1', take_id: 'tk_a', t_ms: 100, end_ms: null, kind: 'input', label: '2', provenance: 'human_manual', confidence: 1 }],
     }],
   }],
+  keymap_id: null, keymap_version: null,
 }
 
 // m1 holds until m2 (m1.end_ms === m2.t_ms) — used to test that the holder
@@ -50,6 +51,7 @@ const treeWithHold: AnalysisTree = {
       ],
     }],
   }],
+  keymap_id: null, keymap_version: null,
 }
 
 beforeEach(() => {

@@ -9,6 +9,7 @@ const tree: AnalysisTree = {
     { id: 'ln_1', layer: 'L1', takes: [{ id: 'tk_c', idx: 1, marks: [] }] },
   ],
   tally: [],
+  keymap_id: null, keymap_version: null,
 }
 const mark = (id: string, t: number): Mark =>
   ({ id, take_id: 'tk_a', t_ms: t, end_ms: null, kind: 'input', label: '2', provenance: 'human_manual', confidence: 1 })

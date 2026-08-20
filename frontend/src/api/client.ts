@@ -1,4 +1,4 @@
-import type { Aggregate, AnalysisTree, Mark, Take, Tally, Video } from './types'
+import type { Aggregate, AnalysisTree, DiscoverResult, InferResult, Keymap, Mark, PatternItem, Proposal, Rotation, Skill, Take, Tally, Video } from './types'
 import { useErrors } from '../state/errors'
 
 async function j<T>(r: Response): Promise<T> {
@@ -52,6 +52,31 @@ export const api = {
 
   laneAggregate: (laneId: string, windowMs = 300) =>
     fetch(`/api/lanes/${laneId}/aggregate?window_ms=${windowMs}`).then(r => j<Aggregate>(r)),
+
+  listSkills: () => fetch('/api/skills').then(r => j<Skill[]>(r)),
+  createSkill: (s: { name: string; class_?: string; cd_ms?: number; cast_ms?: number; anim_ms?: number; cancelable?: boolean; pattern: PatternItem[] }) =>
+    post('/api/skills', s).then(r => j<Skill>(r)),
+  patchSkill: (id: string, patch: Partial<{ name: string; class_: string; cd_ms: number; cast_ms: number; anim_ms: number; cancelable: boolean; pattern: PatternItem[] }>) =>
+    fetch(`/api/skills/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }).then(r => j<Skill>(r)),
+  deleteSkill: (id: string) => fetch(`/api/skills/${id}`, { method: 'DELETE' }).then(r => j<{ ok: boolean }>(r)),
+
+  listKeymaps: () => fetch('/api/keymaps').then(r => j<Keymap[]>(r)),
+  saveKeymap: (k: { keymap_id: string; class_?: string; binds: Record<string, string[]> }) =>
+    post('/api/keymaps', k).then(r => j<Keymap>(r)),
+  bindKeymap: (analysisId: string, keymapId: string, version: number) =>
+    fetch(`/api/analyses/${analysisId}/keymap`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keymap_id: keymapId, version }) }).then(r => j<AnalysisTree>(r)),
+
+  runInfer: (analysisId: string) =>
+    post(`/api/analyses/${analysisId}/infer`).then(r => j<InferResult>(r)),
+  runDiscover: (analysisId: string) =>
+    post(`/api/analyses/${analysisId}/discover`).then(r => j<DiscoverResult>(r)),
+  listProposals: (analysisId: string) =>
+    fetch(`/api/analyses/${analysisId}/proposals`).then(r => j<Proposal[]>(r)),
+  acceptProposal: (id: string) =>
+    post(`/api/proposals/${id}/accept`).then(r => j<{ proposal: Proposal; rotation: Rotation }>(r)),
+  rejectProposal: (id: string) =>
+    post(`/api/proposals/${id}/reject`).then(r => j<Proposal>(r)),
+  listRotations: () => fetch('/api/rotations').then(r => j<Rotation[]>(r)),
 
   videoFileUrl: (id: string) => `/api/videos/${id}/file`,
   spriteUrl: (id: string) => `/api/videos/${id}/sprite`,

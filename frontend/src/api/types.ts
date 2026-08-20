@@ -22,6 +22,7 @@ export interface Tally { id: string; t_ms: number }
 export interface AnalysisTree {
   id: string; video_id: string; name: string
   lanes: Lane[]; tally: Tally[]
+  keymap_id: string | null; keymap_version: number | null
 }
 
 export interface AggMark {
@@ -29,3 +30,67 @@ export interface AggMark {
   iqr_ms: number; support: number; take_idxs: number[]
 }
 export interface Aggregate { n_takes: number; aggregated: AggMark[]; minority: AggMark[] }
+
+export interface PatternItem {
+  op: 'tap' | 'hold' | 'chord' | 'wheel' | 'gap' | 'skill'
+  key?: string
+  button?: string
+  keys?: string[]
+  ms?: number
+  tol_ms?: number
+  ref?: string
+}
+
+export interface Skill {
+  id: string; name: string; class: string | null
+  cd_ms: number | null; cast_ms: number | null; anim_ms: number | null
+  cancelable: boolean; pattern: PatternItem[]
+}
+
+export interface Keymap {
+  id: string; version: number; class: string | null
+  binds: Record<string, string[]>
+}
+
+export interface Conflict {
+  type: 'undefined_skill' | 'no_l0' | 'three_way'
+  t_ms: number
+  label?: string
+  l0_key?: string
+  l1_label?: string
+  keymap_expected?: string[]
+}
+
+export interface InferResult {
+  links: { l1_t_ms: number; label: string; l0_key: string; l0_t_ms: number; dt_ms: number }[]
+  conflicts: Conflict[]
+  keymap_suggestions: { skill_id: string; key: string; support: number; total: number }[]
+  span_proposals: { mark_id: string | null; t_ms: number; proposed_end_ms: number; confidence: number }[]
+}
+
+export interface Proposal {
+  id: string; analysis_id: string; kind: 'rotation'
+  payload: {
+    name: string; note: string
+    body: Record<string, unknown>[]
+    occurrences: [number, number][]
+    param_positions: number[]
+  }
+  report: {
+    iterations: number; complete: number; coverage: number
+    warnings: string[]; uncovered_before: number; uncovered_after: number
+  }
+  status: 'pending' | 'accepted' | 'rejected'
+}
+
+export interface Rotation {
+  id: string; name: string; note: string | null
+  body: Record<string, unknown>[]; params: unknown[]
+  derived_from: string[]
+}
+
+export interface DiscoverResult {
+  proposals: Proposal[]
+  unmatched: number
+  ambiguities: { t_ms: number; skills: string[] }[]
+}

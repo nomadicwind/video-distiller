@@ -19,3 +19,23 @@ test('non-ok response throws', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('boom', { status: 400 })))
   await expect(api.listVideos()).rejects.toThrow('400')
 })
+
+test('createSkill posts to /api/skills', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ id: 'sk_1', name: '火球术' }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const s = await api.createSkill({ name: '火球术', pattern: [{ op: 'tap', key: '2' }] })
+  expect(s.id).toBe('sk_1')
+  const [url, init] = fetchMock.mock.calls[0]
+  expect(url).toBe('/api/skills')
+  expect(JSON.parse(init.body).pattern[0].op).toBe('tap')
+})
+
+test('runDiscover posts to discover endpoint', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ proposals: [], unmatched: 0, ambiguities: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const r = await api.runDiscover('an_1')
+  expect(r.proposals).toEqual([])
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/analyses/an_1/discover')
+})
