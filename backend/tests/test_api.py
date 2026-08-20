@@ -324,6 +324,20 @@ def test_export_routes(client, analysis):
     assert client.get("/api/playbooks/nope/export.md").status_code == 404
 
 
+def test_export_plan_and_razer_routes(client, analysis):
+    rot, pb = _make_playbook(client, analysis)
+    r = client.get(f"/api/playbooks/{pb['id']}/export.plan")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/json; charset=utf-8"
+    doc = r.json()
+    assert doc["format"] == "vd-plan" and doc["stop_hotkey"] == "F12"
+    r2 = client.get(f"/api/rotations/{rot['id']}/export.razer")
+    assert r2.status_code == 200
+    assert r2.headers["content-type"] == "application/xml; charset=utf-8"
+    assert "<Macro name=" in r2.text
+    assert client.get(f"/api/playbooks/{pb['id']}/export.exe").status_code == 400
+
+
 def test_compose_endpoint_corrects_and_persists(client, analysis, monkeypatch):
     from test_compose import FakeComposeClient
     from vd.agent import PlaybookPlan, SectionPlan

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from vd import agent, align, aggregate as agg, db, ingest, store, discover, matcher, ops as ops_module
 from vd.config import data_root
-from vd.emit import ahk as emit_ahk, md as emit_md
+from vd.emit import ahk as emit_ahk, md as emit_md, plan as emit_plan, razer as emit_razer
 
 app = FastAPI(title="Video Distiller")
 
@@ -506,28 +506,41 @@ def _export_context(conn):
     return skills_by_id, rotations_by_id
 
 
+_EXPORT_MEDIA = {
+    "md": "text/markdown; charset=utf-8",
+    "ahk": "text/plain; charset=utf-8",
+    "plan": "application/json; charset=utf-8",
+    "razer": "application/xml; charset=utf-8",
+}
+
+
 def _text_response(text: str, fmt: str):
-    media = "text/markdown; charset=utf-8" if fmt == "md" else "text/plain; charset=utf-8"
-    return PlainTextResponse(text, media_type=media)
+    return PlainTextResponse(text, media_type=_EXPORT_MEDIA[fmt])
 
 
 @app.get("/api/rotations/{rotation_id}/export.{fmt}")
 def export_rotation(rotation_id: str, fmt: str, conn=Depends(get_conn)):
-    if fmt not in ("md", "ahk"):
-        raise HTTPException(400, "fmt 仅支持 md/ahk")
+    if fmt not in ("md", "ahk", "plan", "razer"):
+        raise HTTPException(400, "fmt 仅支持 md/ahk/plan/razer")
     rot = store.get_rotation(conn, rotation_id)
     if rot is None:
         raise HTTPException(404)
     skills_by_id, _ = _export_context(conn)
     if fmt == "md":
-        return _text_response(emit_md.render_rotation_md(rot, skills_by_id), fmt)
-    return _text_response(emit_ahk.render_rotation_ahk(rot, skills_by_id, {}), fmt)
+        text = emit_md.render_rotation_md(rot, skills_by_id)
+    elif fmt == "ahk":
+        text = emit_ahk.render_rotation_ahk(rot, skills_by_id, {})
+    elif fmt == "plan":
+        text = emit_plan.render_rotation_plan(rot, skills_by_id, {})
+    else:
+        text = emit_razer.render_rotation_razer(rot, skills_by_id, {})
+    return _text_response(text, fmt)
 
 
 @app.get("/api/playbooks/{playbook_id}/export.{fmt}")
 def export_playbook(playbook_id: str, fmt: str, conn=Depends(get_conn)):
-    if fmt not in ("md", "ahk"):
-        raise HTTPException(400, "fmt 仅支持 md/ahk")
+    if fmt not in ("md", "ahk", "plan", "razer"):
+        raise HTTPException(400, "fmt 仅支持 md/ahk/plan/razer")
     pb = store.get_playbook(conn, playbook_id)
     if pb is None:
         raise HTTPException(404)
@@ -537,10 +550,14 @@ def export_playbook(playbook_id: str, fmt: str, conn=Depends(get_conn)):
         km = store.get_keymap(conn, pb["keymap_id"], pb["keymap_version"])
         binds = km["binds"] if km else {}
     if fmt == "md":
-        return _text_response(
-            emit_md.render_playbook_md(pb, rotations_by_id, skills_by_id), fmt)
-    return _text_response(
-        emit_ahk.render_playbook_ahk(pb, rotations_by_id, skills_by_id, binds), fmt)
+        text = emit_md.render_playbook_md(pb, rotations_by_id, skills_by_id)
+    elif fmt == "ahk":
+        text = emit_ahk.render_playbook_ahk(pb, rotations_by_id, skills_by_id, binds)
+    elif fmt == "plan":
+        text = emit_plan.render_playbook_plan(pb, rotations_by_id, skills_by_id, binds)
+    else:
+        text = emit_razer.render_playbook_razer(pb, rotations_by_id, skills_by_id, binds)
+    return _text_response(text, fmt)
 
 
 @app.get("/api/playbooks")
