@@ -73,8 +73,14 @@ def test_windows_event_line_protocol():
 def test_capture_commands():
     mac = host.MacHost._capture_cmd("/tmp/o.mp4")
     assert mac[0] == "ffmpeg" and "avfoundation" in mac and "/tmp/o.mp4" == mac[-1]
+    # -framerate must come BEFORE -i for avfoundation demuxer (60fps requirement)
+    assert mac.index("-framerate") < mac.index("-i"), "framerate must precede -i"
+
     win = host.WindowsHost._capture_cmd("/tmp/o.mp4")
     assert win[0] == "ffmpeg" and "ddagrab" in " ".join(win) and "/tmp/o.mp4" == win[-1]
+    # Windows framerate is in the filter, not as a flag
+    assert "-framerate" not in win, "Windows should not have -framerate flag"
+    assert "ddagrab=framerate=60" in " ".join(win), "Windows must use ddagrab filter with framerate"
 
 
 def test_stop_capture_without_start_raises():

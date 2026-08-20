@@ -41,7 +41,7 @@ class MockHost:
         return out
 
 
-_CAPTURE_COMMON = ["-y", "-framerate", "60", "-pix_fmt", "yuv420p"]
+_CAPTURE_COMMON = ["-y", "-pix_fmt", "yuv420p"]
 
 
 class MacHost:
@@ -53,7 +53,7 @@ class MacHost:
 
     @staticmethod
     def _capture_cmd(out_path: str) -> list[str]:
-        return (["ffmpeg", "-f", "avfoundation", "-i", "1:none",
+        return (["ffmpeg", "-f", "avfoundation", "-framerate", "60", "-i", "1:none",
                  *_CAPTURE_COMMON, out_path])
 
     def inject_input(self, event: dict) -> None:
