@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Film, Link as LinkIcon, Upload } from 'lucide-react'
 import { api } from './api/client'
 import type { Video, Aggregate, Keymap } from './api/types'
 import { useHotkeys } from './hotkeys'
@@ -15,6 +17,14 @@ import { KeymapPage } from './pages/KeymapPage'
 import { PlaybooksPage } from './pages/PlaybooksPage'
 import { PlaybookEditor } from './pages/PlaybookEditor'
 import { ExecPage } from './pages/ExecPage'
+import { TopBar } from './shell/TopBar'
+import type { NavPage } from './shell/TopBar'
+import { Button } from './ui/Button'
+import { Card } from './ui/Card'
+import { Field } from './ui/Field'
+import { Badge } from './ui/Badge'
+import { EmptyState } from './ui/EmptyState'
+import { Tooltip } from './ui/Tooltip'
 
 function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   const analysis = useSession(s => s.analysis)
@@ -87,7 +97,21 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   )
 }
 
-function VideoLibrary({ onOpen, onCatalog, onKeymap, onPlaybooks, onExec }: { onOpen: (v: Video) => void; onCatalog: () => void; onKeymap: () => void; onPlaybooks: () => void; onExec: () => void }) {
+const STATUS_BADGE: Record<Video['status'], 'accent' | 'success' | 'warn' | 'danger' | 'neutral'> = {
+  ready: 'success',
+  transcoding: 'accent',
+  ingesting: 'accent',
+  failed: 'danger',
+}
+
+const STATUS_LABEL: Record<Video['status'], string> = {
+  ready: '就绪',
+  transcoding: '转码中',
+  ingesting: '导入中',
+  failed: '失败',
+}
+
+function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
   const [videos, setVideos] = useState<Video[]>([])
   const [url, setUrl] = useState('')
   const refresh = () => { void api.listVideos().then(setVideos) }
@@ -100,59 +124,88 @@ function VideoLibrary({ onOpen, onCatalog, onKeymap, onPlaybooks, onExec }: { on
 
   return (
     <div className="library">
-      <h1>Video Distiller</h1>
-      <p>
-        <button onClick={onCatalog}>技能目录</button>
-        <button onClick={onKeymap}>键位设置</button>
-        <button onClick={onPlaybooks}>循环与方案</button>
-        <button onClick={onExec}>执行台</button>
-      </p>
-      <p>
-        上传视频：
-        <input type="file" accept="video/*" onChange={async e => {
-          const f = e.target.files?.[0]
-          if (f) { await api.upload(f); refresh(); e.target.value = '' }
-        }} />
-      </p>
-      <p>
-        <input style={{ width: 320 }} placeholder="B 站视频 URL（抖音请手动下载后上传）"
-          value={url} onChange={e => setUrl(e.target.value)} />
-        <button disabled={!url} onClick={async () => {
-          await api.pull(url); setUrl(''); refresh()
-        }}>拉取</button>
-      </p>
-      <table>
-        <tbody>
-          {videos.map(v => (
-            <tr key={v.id}>
-              <td>video-{v.seq}</td>
-              <td>{v.name}</td>
-              <td>{v.status}{v.error ? `：${v.error}` : ''}</td>
-              <td>{v.fps ?? '—'} fps</td>
-              <td>
-                <button disabled={v.status !== 'ready'} onClick={() => onOpen(v)}>打开</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Card title="导入视频">
+        <div className="import-row">
+          <label className="dropzone"
+            onDragOver={e => e.preventDefault()}
+            onDrop={async e => {
+              e.preventDefault()
+              const f = e.dataTransfer.files?.[0]
+              if (f) { await api.upload(f); refresh() }
+            }}>
+            <Upload />
+            <span>拖入视频文件，或点击选择</span>
+            <input type="file" accept="video/*" hidden onChange={async e => {
+              const f = e.target.files?.[0]
+              if (f) { await api.upload(f); refresh(); e.target.value = '' }
+            }} />
+          </label>
+          <Field label="B 站视频 URL（抖音请手动下载后上传）">
+            <div className="import-url-row">
+              <input value={url} onChange={e => setUrl(e.target.value)}
+                placeholder="https://www.bilibili.com/video/..." />
+              <Button variant="primary" icon={<LinkIcon />} disabled={!url} onClick={async () => {
+                await api.pull(url); setUrl(''); refresh()
+              }}>拉取</Button>
+            </div>
+          </Field>
+        </div>
+      </Card>
+
+      {videos.length === 0 ? (
+        <EmptyState icon={<Film />} text="还没有视频，拖入文件或粘贴 B 站链接开始分析" />
+      ) : (
+        <div className="video-grid">
+          {videos.map(v => {
+            const badge = <Badge kind={STATUS_BADGE[v.status]}>{STATUS_LABEL[v.status]}</Badge>
+            return (
+              <Card key={v.id} title={`video-${v.seq}`}
+                extra={v.status === 'failed' && v.error ? <Tooltip tip={v.error}>{badge}</Tooltip> : badge}>
+                <div className="video-cover"><Film /></div>
+                <div className="video-name">{v.name}</div>
+                <div className="video-fps mono">{v.fps ?? '—'} fps</div>
+                <Button variant="primary" disabled={v.status !== 'ready'} onClick={() => onOpen(v)}>打开</Button>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
 export default function App() {
   const [video, setVideo] = useState<Video | null>(null)
-  const [page, setPage] = useState<'library' | 'catalog' | 'keymap' | 'playbooks' | 'exec'>('library')
+  const [page, setPage] = useState<NavPage>('library')
   const [editingPlaybook, setEditingPlaybook] = useState<string | null>(null)
-  if (video) return <><ErrorBar /><Workbench video={video} onBack={() => setVideo(null)} /></>
-  if (editingPlaybook) return <><ErrorBar />
-    <PlaybookEditor playbookId={editingPlaybook} onBack={() => setEditingPlaybook(null)} /></>
-  if (page === 'catalog') return <><ErrorBar /><CatalogPage onBack={() => setPage('library')} /></>
-  if (page === 'keymap') return <><ErrorBar /><KeymapPage onBack={() => setPage('library')} /></>
-  if (page === 'playbooks') return <><ErrorBar />
-    <PlaybooksPage onBack={() => setPage('library')} onEdit={setEditingPlaybook} /></>
-  if (page === 'exec') return <><ErrorBar /><ExecPage onBack={() => setPage('library')} /></>
-  return <><ErrorBar /><VideoLibrary onOpen={setVideo}
-    onCatalog={() => setPage('catalog')} onKeymap={() => setPage('keymap')}
-    onPlaybooks={() => setPage('playbooks')} onExec={() => setPage('exec')} /></>
+
+  // TopBar's nav strip only recognizes the five top-level pages; passing a
+  // sentinel here while the Workbench/PlaybookEditor is open is how it knows
+  // to dim and disable itself (see shell/TopBar.tsx).
+  const topBarPage: string = video ? 'workbench' : editingPlaybook ? 'editor' : page
+
+  let content: ReactNode
+  if (video) {
+    content = <Workbench video={video} onBack={() => setVideo(null)} />
+  } else if (editingPlaybook) {
+    content = <PlaybookEditor playbookId={editingPlaybook} onBack={() => setEditingPlaybook(null)} />
+  } else if (page === 'catalog') {
+    content = <CatalogPage onBack={() => setPage('library')} />
+  } else if (page === 'keymap') {
+    content = <KeymapPage onBack={() => setPage('library')} />
+  } else if (page === 'playbooks') {
+    content = <PlaybooksPage onBack={() => setPage('library')} onEdit={setEditingPlaybook} />
+  } else if (page === 'exec') {
+    content = <ExecPage onBack={() => setPage('library')} />
+  } else {
+    content = <VideoLibrary onOpen={setVideo} />
+  }
+
+  return (
+    <>
+      <TopBar page={topBarPage} onNav={setPage} />
+      {content}
+      <ErrorBar />
+    </>
+  )
 }
