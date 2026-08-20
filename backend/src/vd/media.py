@@ -32,3 +32,14 @@ def target_fps(src_fps: float) -> int:
 
 def thumb_interval_s(duration_ms: int) -> int:
     return max(1, math.ceil(duration_ms / 1000 / 600))
+
+
+def transcode_cfr(src: Path, dst: Path, fps: int) -> None:
+    """统一转码为恒定帧率工作副本（spec §4.4）。原始文件不动。"""
+    _run([
+        "ffmpeg", "-y", "-i", str(src),
+        "-vf", f"fps={fps}",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+        "-pix_fmt", "yuv420p", "-c:a", "aac",
+        "-movflags", "+faststart", str(dst),
+    ])

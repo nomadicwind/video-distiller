@@ -21,3 +21,11 @@ def test_probe_sample(sample_video):
     assert abs(info["fps"] - 15.0) < 0.1
     assert (info["width"], info["height"]) == (320, 240)
     assert abs(info["duration_ms"] - 2000) < 200
+
+
+def test_transcode_cfr_produces_target_fps(sample_video, tmp_path):
+    out = tmp_path / "work.mp4"
+    media.transcode_cfr(sample_video, out, 30)
+    info = media.probe(out)
+    assert abs(info["fps"] - 30.0) < 0.1
+    assert abs(info["duration_ms"] - 2000) < 300
