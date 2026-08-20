@@ -22,3 +22,13 @@ def sample_video(tmp_path_factory):
         check=True, capture_output=True,
     )
     return p
+
+
+@pytest.fixture
+def client(data_dir):
+    from fastapi.testclient import TestClient
+
+    from vd.api import app
+
+    with TestClient(app) as c:
+        yield c
