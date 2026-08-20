@@ -4,6 +4,7 @@ import type { Video } from './api/types'
 import { useHotkeys } from './hotkeys'
 import { Player } from './player/Player'
 import { ThumbStrip } from './strip/ThumbStrip'
+import { Timeline } from './timeline/Timeline'
 import { useSession } from './state/store'
 
 function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
@@ -24,7 +25,8 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
         <p><button onClick={onBack}>← 返回</button> {analysis.name}</p>
         <Player videoId={video.id} fps={video.fps ?? 30} durationMs={video.duration_ms ?? 0} />
         <ThumbStrip video={video} />
-        {/* 后续任务在此依次挂载：TallyBar（21）、Timeline（18）*/}
+        <Timeline video={video} aggregate={null} />
+        {/* 后续任务在此依次挂载：TallyBar（21）*/}
       </div>
       {/* EntryPanel（任务 20）挂载于此 */}
     </div>
