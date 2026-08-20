@@ -14,3 +14,21 @@ def test_upload_runs_full_ingest_pipeline(client, sample_video):
 
 def test_get_missing_video_404(client):
     assert client.get("/api/videos/nope").status_code == 404
+
+
+def test_pull_endpoint_full_flow(client, sample_video, monkeypatch):
+    import shutil
+
+    from vd import ingest
+
+    def fake_pull(url, dest, runner=None):
+        shutil.copy(sample_video, dest)
+        return dest
+
+    monkeypatch.setattr(ingest, "pull_bilibili", fake_pull)
+    r = client.post("/api/videos/pull",
+                    json={"url": "https://www.bilibili.com/video/BVxxxx"})
+    assert r.status_code == 200
+    v = client.get(f"/api/videos/{r.json()['id']}").json()
+    assert v["status"] == "ready"
+    assert v["source_kind"] == "bilibili"

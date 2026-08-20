@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 from vd import db, media, store
@@ -28,3 +30,19 @@ def process(video_id: str) -> None:
         store.update_video(conn, video_id, status="failed", error=str(e))
     finally:
         conn.close()
+
+
+def default_runner(cmd: list[str]) -> None:
+    subprocess.run(cmd, check=True, capture_output=True)
+
+
+def pull_bilibili(url: str, dest: Path, runner=default_runner) -> Path:
+    """B 站拉取（spec §4.4：仅 B 站；抖音走手动上传）。"""
+    runner([
+        sys.executable, "-m", "yt_dlp",
+        "-f", "bv*+ba/b", "--merge-output-format", "mp4",
+        "-o", str(dest), url,
+    ])
+    if not dest.exists():
+        raise RuntimeError("yt-dlp 未产出文件，请手动下载后上传")
+    return dest
