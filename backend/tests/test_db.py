@@ -21,3 +21,22 @@ def test_foreign_keys_enforced():
 def test_connect_is_idempotent():
     db.connect().close()
     db.connect().close()  # 第二次连接不因重复建表报错
+
+
+def test_connection_usable_across_threads():
+    import threading
+
+    conn = db.connect()
+    errors: list[Exception] = []
+
+    def use():
+        try:
+            conn.execute("SELECT COUNT(*) FROM videos").fetchone()
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    t = threading.Thread(target=use)
+    t.start()
+    t.join()
+    assert errors == []
+    conn.close()
