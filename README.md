@@ -29,3 +29,11 @@
 - 方案块编辑器：段落/块行内编辑、pinned、版本链与回滚、文档与 AHK 并排预览
 - 工作台「编排方案」：LLM 把已接受的循环编排成分段方案（无 API key 时确定性兜底为单段），提案逐块勾选裁决
 - AHK 产物为 AutoHotkey v2；真机运行验收属 M4（Windows）
+
+## M4 · 执行与采集
+
+- **执行台**：选循环/方案 → 开始/暂停/单步/停止；仅执行不判断成败；Windows 上 F12 全局急停并释放按键（AHK v2 worker）。macOS 无注入（Mock 供开发）。
+- **执行日志回灌**：执行结束后可回灌为目标分析 L0 泳道的新 Take（`provenance=execution_log`，不参与聚合中位数），与人工标注并排对比。
+- **新导出后端**：`plan`（注入计划 JSON）与 `razer`（Synapse 宏 XML；格式未经官方验证，导入由用户在 Windows 验证）。
+- **屏幕采集**：`/api/capture/start|stop`，停止后自动 CFR 入库（Windows ddagrab / macOS avfoundation）。
+- **Windows 真机注入未在本机验证**（macOS 开发环境）；MockHost 覆盖全链路测试。

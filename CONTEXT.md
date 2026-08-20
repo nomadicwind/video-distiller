@@ -82,3 +82,12 @@ Agent 的产出形态。以块级 diff 呈现，人逐块裁决后才写入 IR�
 
 **Provenance（来源）**:
 每个 IR 元素的出处标记（human_manual / human_edited / human_authored / agent / execution_log）。
+
+**执行台（Execution Console）**:
+选循环/方案 → 开始/暂停/单步/停止的交互界面；仅执行不判断成败。Windows 上 F12 全局急停，macOS 无真机注入（Mock 供开发）。
+
+**回灌（Backfeed）**:
+执行日志按 Take 格式写回 L0 泳道，provenance=execution_log，不参与聚合中位数，与人工标注并排对比。
+
+**注入计划（Plan）**:
+`vd-plan` JSON 格式，events 为定时 down/up/tap/wheel 序列，用于配置注入执行器的操作指令。
