@@ -15,7 +15,7 @@ def _item_matches_token(item: dict, tok: dict) -> bool:
     if op == "wheel":
         return tok["kind"] == "wheel"
     if op == "chord":
-        return tok["kind"] == "chord" and sorted(item["keys"]) == tok.get("keys")
+        return tok["kind"] == "chord" and sorted(item["keys"]) == sorted(tok.get("keys") or [])
     if op == "hold":
         if tok["kind"] != "hold":
             return False
