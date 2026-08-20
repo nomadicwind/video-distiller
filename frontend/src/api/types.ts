@@ -68,13 +68,36 @@ export interface InferResult {
   span_proposals: { mark_id: string | null; t_ms: number; proposed_end_ms: number; confidence: number }[]
 }
 
+export interface Block {
+  rotation?: string
+  skill?: string
+  gap?: number
+  tol?: number
+  note?: string
+  iterations?: number
+  repeat_note?: string
+  pinned?: boolean
+  confidence?: number
+}
+
+export interface Section { name: string; body: Block[] }
+
+export interface Playbook {
+  id: string; name: string; class: string | null
+  keymap_id: string | null; keymap_version: number | null
+  sections: Section[]; derived_from: string[]; version: number
+}
+
+export interface PlaybookVersion { version: number; created_at: string }
+
 export interface Proposal {
   id: string; analysis_id: string; kind: 'rotation'
   payload: {
     name: string; note: string
-    body: Record<string, unknown>[]
-    occurrences: [number, number][]
-    param_positions: number[]
+    body?: Record<string, unknown>[]
+    occurrences?: [number, number][]
+    param_positions?: number[]
+    sections?: Section[]
   }
   report: {
     iterations: number; complete: number; coverage: number

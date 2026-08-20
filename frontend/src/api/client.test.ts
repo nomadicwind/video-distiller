@@ -39,3 +39,30 @@ test('runDiscover posts to discover endpoint', async () => {
   expect(r.proposals).toEqual([])
   expect(fetchMock.mock.calls[0][0]).toBe('/api/analyses/an_1/discover')
 })
+
+test('runCompose posts to compose endpoint', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ proposal: { id: 'pp_1' } }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await api.runCompose('an_1')
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/analyses/an_1/compose')
+})
+
+test('acceptProposal sends adjudicated sections when provided', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ proposal: {}, playbook: {} }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await api.acceptProposal('pp_1', [{ name: 's', body: [] }])
+  const [, init] = fetchMock.mock.calls[0]
+  expect(JSON.parse(init.body).sections[0].name).toBe('s')
+})
+
+test('putPlaybook and export urls', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ id: 'pb_1', version: 2 }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await api.putPlaybook('pb_1', { sections: [] })
+  expect(fetchMock.mock.calls[0][1].method).toBe('PUT')
+  expect(api.playbookExportUrl('pb_1', 'ahk')).toBe('/api/playbooks/pb_1/export.ahk')
+  expect(api.rotationExportUrl('rot_1', 'md')).toBe('/api/rotations/rot_1/export.md')
+})

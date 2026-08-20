@@ -1,4 +1,4 @@
-import type { Aggregate, AnalysisTree, DiscoverResult, InferResult, Keymap, Mark, PatternItem, Proposal, Rotation, Skill, Take, Tally, Video } from './types'
+import type { Aggregate, AnalysisTree, DiscoverResult, InferResult, Keymap, Mark, PatternItem, Playbook, PlaybookVersion, Proposal, Rotation, Section, Skill, Take, Tally, Video } from './types'
 import { useErrors } from '../state/errors'
 
 async function j<T>(r: Response): Promise<T> {
@@ -72,11 +72,25 @@ export const api = {
     post(`/api/analyses/${analysisId}/discover`).then(r => j<DiscoverResult>(r)),
   listProposals: (analysisId: string) =>
     fetch(`/api/analyses/${analysisId}/proposals`).then(r => j<Proposal[]>(r)),
-  acceptProposal: (id: string) =>
-    post(`/api/proposals/${id}/accept`).then(r => j<{ proposal: Proposal; rotation: Rotation }>(r)),
+  acceptProposal: (id: string, sections?: Section[]) =>
+    post(`/api/proposals/${id}/accept`, sections ? { sections } : undefined)
+      .then(r => j<{ proposal: Proposal; rotation?: Rotation; playbook?: Playbook }>(r)),
   rejectProposal: (id: string) =>
     post(`/api/proposals/${id}/reject`).then(r => j<Proposal>(r)),
   listRotations: () => fetch('/api/rotations').then(r => j<Rotation[]>(r)),
+
+  listPlaybooks: () => fetch('/api/playbooks').then(r => j<Playbook[]>(r)),
+  getPlaybook: (id: string) => fetch(`/api/playbooks/${id}`).then(r => j<Playbook>(r)),
+  putPlaybook: (id: string, body: { name?: string; sections: Section[] }) =>
+    fetch(`/api/playbooks/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => j<Playbook>(r)),
+  playbookVersions: (id: string) =>
+    fetch(`/api/playbooks/${id}/versions`).then(r => j<PlaybookVersion[]>(r)),
+  rollbackPlaybook: (id: string, version: number) =>
+    post(`/api/playbooks/${id}/rollback`, { version }).then(r => j<Playbook>(r)),
+  runCompose: (analysisId: string) =>
+    post(`/api/analyses/${analysisId}/compose`).then(r => j<{ proposal: Proposal }>(r)),
+  rotationExportUrl: (id: string, fmt: 'md' | 'ahk') => `/api/rotations/${id}/export.${fmt}`,
+  playbookExportUrl: (id: string, fmt: 'md' | 'ahk') => `/api/playbooks/${id}/export.${fmt}`,
 
   videoFileUrl: (id: string) => `/api/videos/${id}/file`,
   spriteUrl: (id: string) => `/api/videos/${id}/sprite`,
