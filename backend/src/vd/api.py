@@ -4,11 +4,12 @@ from pathlib import Path
 from typing import Iterator, Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from vd import agent, align, aggregate as agg, db, ingest, store, discover, matcher, ops as ops_module
 from vd.config import data_root
+from vd.emit import ahk as emit_ahk, md as emit_md
 
 app = FastAPI(title="Video Distiller")
 
@@ -423,3 +424,46 @@ def run_discover(analysis_id: str, conn=Depends(get_conn)):
     return {"proposals": results,
             "unmatched": len(matched["unmatched"]),
             "ambiguities": matched["ambiguities"]}
+
+
+def _export_context(conn):
+    skills_by_id = {s["id"]: s for s in store.list_skills(conn)}
+    rotations_by_id = {r["id"]: r for r in store.list_rotations(conn)}
+    return skills_by_id, rotations_by_id
+
+
+def _text_response(text: str, fmt: str):
+    media = "text/markdown; charset=utf-8" if fmt == "md" else "text/plain; charset=utf-8"
+    return PlainTextResponse(text, media_type=media)
+
+
+@app.get("/api/rotations/{rotation_id}/export.{fmt}")
+def export_rotation(rotation_id: str, fmt: str, conn=Depends(get_conn)):
+    if fmt not in ("md", "ahk"):
+        raise HTTPException(400, "fmt 仅支持 md/ahk")
+    rot = store.get_rotation(conn, rotation_id)
+    if rot is None:
+        raise HTTPException(404)
+    skills_by_id, _ = _export_context(conn)
+    if fmt == "md":
+        return _text_response(emit_md.render_rotation_md(rot, skills_by_id), fmt)
+    return _text_response(emit_ahk.render_rotation_ahk(rot, skills_by_id, {}), fmt)
+
+
+@app.get("/api/playbooks/{playbook_id}/export.{fmt}")
+def export_playbook(playbook_id: str, fmt: str, conn=Depends(get_conn)):
+    if fmt not in ("md", "ahk"):
+        raise HTTPException(400, "fmt 仅支持 md/ahk")
+    pb = store.get_playbook(conn, playbook_id)
+    if pb is None:
+        raise HTTPException(404)
+    skills_by_id, rotations_by_id = _export_context(conn)
+    binds = {}
+    if pb.get("keymap_id"):
+        km = store.get_keymap(conn, pb["keymap_id"], pb["keymap_version"])
+        binds = km["binds"] if km else {}
+    if fmt == "md":
+        return _text_response(
+            emit_md.render_playbook_md(pb, rotations_by_id, skills_by_id), fmt)
+    return _text_response(
+        emit_ahk.render_playbook_ahk(pb, rotations_by_id, skills_by_id, binds), fmt)

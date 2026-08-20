@@ -289,3 +289,36 @@ def test_accept_creates_rotation_before_status(client, analysis):
     conn.close()
     bad = [x for x in fresh if x["id"] == p["id"]][0]
     assert bad["status"] == "pending"                 # ……但状态未被卡死，可重试/拒绝
+
+
+def _make_playbook(client, analysis):
+    sk = client.post("/api/skills", json={"name": "平A", "pattern": [
+        {"op": "tap", "key": "1"}]}).json()
+    from vd import db, store
+    conn = db.connect()
+    rot = store.create_rotation(conn, name="小循环",
+                                body=[{"skill": sk["id"]}, {"gap": 150}],
+                                derived_from=[analysis["id"]])
+    pb = store.create_playbook(conn, name="测试方案", sections=[
+        {"name": "唯一段", "body": [{"rotation": rot["id"], "iterations": 2}]}],
+        derived_from=[analysis["id"]])
+    conn.close()
+    return rot, pb
+
+
+def test_export_routes(client, analysis):
+    rot, pb = _make_playbook(client, analysis)
+    md = client.get(f"/api/playbooks/{pb['id']}/export.md")
+    assert md.status_code == 200
+    assert md.headers["content-type"].startswith("text/markdown")
+    assert "# 方案：测试方案" in md.text
+    ahk = client.get(f"/api/playbooks/{pb['id']}/export.ahk")
+    assert ahk.status_code == 200
+    assert "#Requires AutoHotkey v2.0" in ahk.text
+    assert "Loop 2 {" in ahk.text
+    rmd = client.get(f"/api/rotations/{rot['id']}/export.md")
+    assert "# 循环：小循环" in rmd.text
+    rahk = client.get(f"/api/rotations/{rot['id']}/export.ahk")
+    assert 'Send "{1}"' in rahk.text
+    assert client.get(f"/api/playbooks/{pb['id']}/export.pdf").status_code == 400
+    assert client.get("/api/playbooks/nope/export.md").status_code == 404
