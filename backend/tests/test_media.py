@@ -1,4 +1,12 @@
+import pytest
+
 from vd import media
+
+
+def test_run_failure_includes_stderr(tmp_path):
+    with pytest.raises(RuntimeError) as ei:
+        media._run(["ffprobe", str(tmp_path / "nonexistent.mp4")])
+    assert "nonexistent.mp4" in str(ei.value)
 
 
 def test_target_fps_rule():

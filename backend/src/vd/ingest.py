@@ -33,7 +33,11 @@ def process(video_id: str) -> None:
 
 
 def default_runner(cmd: list[str]) -> None:
-    subprocess.run(cmd, check=True, capture_output=True)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        tail = (e.stderr or "")[-500:]
+        raise RuntimeError(f"yt-dlp 失败：{tail}") from e
 
 
 def pull_bilibili(url: str, dest: Path, runner=default_runner) -> Path:

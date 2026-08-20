@@ -5,7 +5,11 @@ from pathlib import Path
 
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, check=True, capture_output=True, text=True)
+    try:
+        return subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        tail = (e.stderr or "")[-500:]
+        raise RuntimeError(f"{cmd[0]} 失败（{' '.join(cmd[:6])}…）：{tail}") from e
 
 
 def probe(path: Path) -> dict:

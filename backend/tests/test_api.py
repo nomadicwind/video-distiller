@@ -86,6 +86,24 @@ def test_analysis_create_and_fetch(client, analysis):
     assert [l["layer"] for l in tree["lanes"]] == ["L0", "L1", "L2"]
 
 
+def test_invalid_mark_kind_is_422(client, analysis):
+    take = analysis["lanes"][0]["takes"][0]
+    r = client.post(f"/api/takes/{take['id']}/marks",
+                    json={"t_ms": 10, "kind": "boom", "label": "2"})
+    assert r.status_code == 422
+
+
+def test_suffix_range(client, sample_video):
+    vid = _ready_video(client, sample_video)
+    full = client.get(f"/api/videos/{vid}/file")
+    size = int(full.headers["content-length"])
+    r = client.get(f"/api/videos/{vid}/file", headers={"Range": "bytes=-100"})
+    assert r.status_code == 206
+    assert len(r.content) == 100
+    assert r.headers["content-range"] == f"bytes {size - 100}-{size - 1}/{size}"
+    assert r.content == full.content[-100:]
+
+
 def test_mark_crud_over_http(client, analysis):
     take = analysis["lanes"][0]["takes"][0]
     m = client.post(f"/api/takes/{take['id']}/marks",

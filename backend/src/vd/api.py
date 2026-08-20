@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -50,8 +50,13 @@ def video_file(video_id: str, request: Request, conn=Depends(get_conn)):
             _read_range(path, 0, size - 1), media_type="video/mp4",
             headers={"Accept-Ranges": "bytes", "Content-Length": str(size)},
         )
-    start = int(m.group(1) or 0)
-    end = min(int(m.group(2) or size - 1), size - 1)
+    g1, g2 = m.group(1), m.group(2)
+    if not g1 and g2:                      # 后缀形式 bytes=-N：最后 N 字节
+        start = max(0, size - int(g2))
+        end = size - 1
+    else:
+        start = int(g1 or 0)
+        end = min(int(g2 or size - 1), size - 1)
     if start >= size or start > end:
         return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
     return StreamingResponse(
@@ -160,7 +165,7 @@ def new_take(lane_id: str, conn=Depends(get_conn)):
 
 class MarkReq(BaseModel):
     t_ms: int
-    kind: str
+    kind: Literal["input", "release"]
     label: str | None = None
     end_ms: int | None = None
 

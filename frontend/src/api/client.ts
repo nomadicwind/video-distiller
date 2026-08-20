@@ -1,7 +1,12 @@
 import type { Aggregate, AnalysisTree, Mark, Take, Tally, Video } from './types'
+import { useErrors } from '../state/errors'
 
 async function j<T>(r: Response): Promise<T> {
-  if (!r.ok) throw new Error(`API ${r.status}: ${await r.text()}`)
+  if (!r.ok) {
+    const text = await r.text()
+    useErrors.getState().pushError(`API ${r.status}: ${text.slice(0, 200)}`)
+    throw new Error(`API ${r.status}: ${text}`)
+  }
   return r.json() as Promise<T>
 }
 

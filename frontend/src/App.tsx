@@ -8,6 +8,7 @@ import { ThumbStrip } from './strip/ThumbStrip'
 import { Timeline } from './timeline/Timeline'
 import { useSession } from './state/store'
 import { EntryPanel } from './panel/EntryPanel'
+import { ErrorBar } from './ErrorBar'
 
 function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   const analysis = useSession(s => s.analysis)
@@ -69,7 +70,7 @@ function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
         上传视频：
         <input type="file" accept="video/*" onChange={async e => {
           const f = e.target.files?.[0]
-          if (f) { await api.upload(f); refresh() }
+          if (f) { await api.upload(f); refresh(); e.target.value = '' }
         }} />
       </p>
       <p>
@@ -100,7 +101,13 @@ function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
 
 export default function App() {
   const [video, setVideo] = useState<Video | null>(null)
-  return video
-    ? <Workbench video={video} onBack={() => setVideo(null)} />
-    : <VideoLibrary onOpen={setVideo} />
+  return (
+    <>
+      <ErrorBar />
+      {video
+        ? <Workbench video={video} onBack={() => setVideo(null)} />
+        : <VideoLibrary onOpen={setVideo} />
+      }
+    </>
+  )
 }
