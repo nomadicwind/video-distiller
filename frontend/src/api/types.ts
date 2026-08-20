@@ -104,7 +104,7 @@ export interface Proposal {
     iterations?: number; complete?: number; coverage?: number
     warnings?: string[]; uncovered_before?: number; uncovered_after?: number
     // playbook report fields
-    rotations_used?: number; unknown_dropped?: number; missing_appended?: number; fallback?: boolean
+    rotations_used?: number; unknown_dropped?: string[]; missing_appended?: number; fallback?: boolean
   }
   status: 'pending' | 'accepted' | 'rejected'
 }
