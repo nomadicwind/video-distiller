@@ -75,7 +75,16 @@ test('startExec posts to exec start endpoint', async () => {
   const [url, init] = fetchMock.mock.calls[0]
   expect(url).toBe('/api/exec/start')
   expect(init.method).toBe('POST')
-  expect(JSON.parse(init.body)).toEqual({ kind: 'rotation', id: 'rot_1', speed: 1.0 })
+  expect(JSON.parse(init.body)).toEqual({ kind: 'rotation', id: 'rot_1', speed: 1.0, paused: false })
+})
+
+test('startExec body includes paused when requested', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ state: 'idle' }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await api.startExec('playbook', 'pb_1', 1.0, true)
+  const [, init] = fetchMock.mock.calls[0]
+  expect(JSON.parse(init.body)).toEqual({ kind: 'playbook', id: 'pb_1', speed: 1.0, paused: true })
 })
 
 test('execCmd posts to exec command endpoint', async () => {

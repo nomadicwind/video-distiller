@@ -130,4 +130,6 @@ export interface ExecStatus {
   title?: string
   error?: string | null
   log?: { t_ms: number; action: string; key: string }[]
+  warnings?: string[]
+  manual_loops?: string[]
 }

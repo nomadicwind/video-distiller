@@ -90,8 +90,8 @@ export const api = {
   runCompose: (analysisId: string) =>
     post(`/api/analyses/${analysisId}/compose`).then(r => j<{ proposal: Proposal }>(r)),
 
-  startExec: (kind: 'rotation' | 'playbook', id: string, speed = 1.0) =>
-    post('/api/exec/start', { kind, id, speed }).then(r => j<ExecStatus>(r)),
+  startExec: (kind: 'rotation' | 'playbook', id: string, speed = 1.0, paused = false) =>
+    post('/api/exec/start', { kind, id, speed, paused }).then(r => j<ExecStatus>(r)),
   execCmd: (cmd: 'pause' | 'resume' | 'stop' | 'step') =>
     post(`/api/exec/${cmd}`, {}).then(r => j<ExecStatus>(r)),
   execStatus: () => fetch('/api/exec/status').then(r => j<ExecStatus>(r)),

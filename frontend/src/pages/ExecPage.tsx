@@ -74,7 +74,7 @@ export function ExecPage({ onBack }: { onBack: () => void }) {
                 onClick={() => void api.execCmd('resume').then(setSt)}>继续</button>{' '}
         <button disabled={!(st.state === 'idle' || st.state === 'paused') || !targetId}
                 onClick={() => void (st.state === 'idle'
-                  ? api.startExec(kind, targetId).then(() => api.execCmd('pause')).then(setSt)
+                  ? api.startExec(kind, targetId, 1.0, true).then(() => api.execCmd('step')).then(setSt)
                   : api.execCmd('step').then(setSt))}>单步</button>{' '}
         <button disabled={!running}
                 onClick={() => void api.execCmd('stop').then(setSt)}>停止</button>
@@ -84,6 +84,12 @@ export function ExecPage({ onBack }: { onBack: () => void }) {
         {st.total != null && <> · {st.cursor}/{st.total}</>}
         {st.error && <span style={{ color: '#c33' }}> · {st.error}</span>}
       </p>
+      {((st.warnings && st.warnings.length > 0) || (st.manual_loops && st.manual_loops.length > 0)) && (
+        <div style={{ color: '#c90' }}>
+          {st.warnings?.map((w, i) => <p key={`w-${i}`} style={{ margin: '2px 0' }}>⚠ {w}</p>)}
+          {st.manual_loops?.map((m, i) => <p key={`m-${i}`} style={{ margin: '2px 0' }}>⚠ {m}</p>)}
+        </div>
+      )}
       {st.log && st.log.length > 0 && (
         <pre style={{ maxHeight: 200, overflow: 'auto' }}>
           {st.log.map(l => `${String(l.t_ms).padStart(6)}ms  ${l.action} ${l.key}`).join('\n')}
