@@ -340,17 +340,17 @@ def accept_proposal(proposal_id: str, req: AcceptReq | None = None,
         raise HTTPException(409, "proposal 已裁决")
     payload = json.loads(row["payload"])
     if row["kind"] == "playbook":
-        sections = req.sections if (req and req.sections is not None) else payload["sections"]
         try:
+            sections = req.sections if (req and req.sections is not None) else payload["sections"]
             store.validate_sections(sections)
-        except ValueError as e:
-            raise HTTPException(400, str(e))
-        tree = store.get_analysis_tree(conn, row["analysis_id"])
-        playbook = store.create_playbook(
-            conn, name=payload["name"], sections=sections,
-            keymap_id=tree.get("keymap_id") if tree else None,
-            keymap_version=tree.get("keymap_version") if tree else None,
-            derived_from=[row["analysis_id"]])
+            tree = store.get_analysis_tree(conn, row["analysis_id"])
+            playbook = store.create_playbook(
+                conn, name=payload["name"], sections=sections,
+                keymap_id=tree.get("keymap_id") if tree else None,
+                keymap_version=tree.get("keymap_version") if tree else None,
+                derived_from=[row["analysis_id"]])
+        except (KeyError, ValueError, TypeError) as e:
+            raise HTTPException(500, str(e))
         p = store.set_proposal_status(conn, proposal_id, "accepted")
         return {"proposal": p, "playbook": playbook}
     try:
@@ -572,6 +572,9 @@ def put_playbook(playbook_id: str, req: PlaybookPut, conn=Depends(get_conn)):
 
 @app.get("/api/playbooks/{playbook_id}/versions")
 def playbook_versions(playbook_id: str, conn=Depends(get_conn)):
+    pb = store.get_playbook(conn, playbook_id)
+    if pb is None:
+        raise HTTPException(404)
     return store.list_playbook_versions(conn, playbook_id)
 
 

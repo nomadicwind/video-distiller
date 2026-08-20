@@ -390,3 +390,23 @@ def test_playbook_routes_roundtrip(client, analysis):
     assert back["sections"][0]["name"] == "唯一段"
     assert client.put("/api/playbooks/nope",
                       json={"sections": []}).status_code == 400
+
+
+def test_accept_playbook_malformed_payload_500_keeps_pending(client, analysis):
+    from vd import db, store
+    conn = db.connect()
+    p = store.create_proposal(conn, analysis_id=analysis["id"], kind="playbook",
+                              payload={"note": "缺 name 和 sections"}, report={})
+    conn.close()
+    r = client.post(f"/api/proposals/{p['id']}/accept")
+    assert r.status_code == 500                       # 畸形 payload 仍失败……
+    conn = db.connect()
+    fresh = store.list_proposals(conn, analysis["id"])
+    conn.close()
+    bad = [x for x in fresh if x["id"] == p["id"]][0]
+    assert bad["status"] == "pending"                 # ……但状态未被卡死，可重试/拒绝
+
+
+def test_playbook_versions_nonexistent_404(client):
+    r = client.get("/api/playbooks/nope/versions")
+    assert r.status_code == 404
