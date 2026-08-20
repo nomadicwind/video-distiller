@@ -25,7 +25,9 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
 
   useEffect(() => {
     if (!showAggregate || !laneId) { setAggregate(null); return }
-    api.laneAggregate(laneId).then(setAggregate)
+    let ignore = false
+    api.laneAggregate(laneId).then(a => { if (!ignore) setAggregate(a) })
+    return () => { ignore = true }
   }, [showAggregate, laneId])
 
   if (!analysis) return <p>加载中…</p>
@@ -37,7 +39,6 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
         <TallyBar />
         <ThumbStrip video={video} />
         <Timeline video={video} aggregate={aggregate} />
-        {/* 后续任务在此依次挂载：A（任务 22）*/}
       </div>
       <EntryPanel />
     </div>
