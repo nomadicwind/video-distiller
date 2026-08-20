@@ -5,6 +5,15 @@
 只做状态翻转，后台线程在下一次派发前必然会检查到并自行退出；resume() 复用
 start() 起一条新线程，从当前 cursor 继续，事件间隔按“相邻两事件的 t_ms 差”
 重新计算，因此暂停时长不影响恢复后的节奏。
+
+线程身份校验：仅靠 state 翻转不足以防止 pause() 后紧接 resume() 时出现两条
+线程同时存活——旧线程可能正阻塞在 time.sleep 里，此时 state 被 resume 重新
+置回 "running"，旧线程醒来后单看 state 会误以为自己仍是合法执行者，从而与
+新线程竞争同一个 cursor，导致同一事件被重复注入。因此 start() 在持锁期间
+把新建的 Thread 对象原子地写入 self._thread（与 state="running" 同一次加锁
+内完成），_run() 的两个重新检查点除了看 state 还要求
+`self._thread is me`——旧线程的 `me` 早已不是 self._thread，检查必然失败并
+退出，不会再派发任何事件。
 """
 import threading
 import time
@@ -41,11 +50,12 @@ class ExecutionSession:
         self.log.append({"t_ms": self._rel_ms(), "action": ev["action"], "key": ev["key"]})
 
     def _run(self) -> None:
+        me = threading.current_thread()
         events = self.plan["events"]
         prev_t = events[self.cursor - 1]["t_ms"] if self.cursor else 0
         while True:
             with self._lock:
-                if self.state != "running":
+                if self.state != "running" or self._thread is not me:
                     return
                 if self.cursor >= len(events):
                     self.state = "done"
@@ -55,7 +65,7 @@ class ExecutionSession:
             if delay > 0:
                 time.sleep(delay)
             with self._lock:
-                if self.state != "running":
+                if self.state != "running" or self._thread is not me:
                     return
                 try:
                     self._dispatch(ev)
@@ -75,7 +85,11 @@ class ExecutionSession:
             if self._t0 is None:
                 self._t0 = time.monotonic()
             self.state = "running"
-        self._thread = threading.Thread(target=self._run, daemon=True)
+            # 新线程对象的创建与写入必须和 state="running" 在同一次加锁内完成，
+            # 否则旧的（可能仍在 time.sleep 中）线程有机会在锁释放后、
+            # self._thread 被重新赋值前抢到锁，看见 state=="running" 且
+            # self._thread 仍是自己，从而误判自己仍是合法执行者。
+            self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def pause(self) -> None:
