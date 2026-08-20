@@ -1,4 +1,4 @@
-import type { Aggregate, AnalysisTree, DiscoverResult, InferResult, Keymap, Mark, PatternItem, Playbook, PlaybookVersion, Proposal, Rotation, Section, Skill, Take, Tally, Video } from './types'
+import type { Aggregate, AnalysisTree, DiscoverResult, ExecStatus, InferResult, Keymap, Mark, PatternItem, Playbook, PlaybookVersion, Proposal, Rotation, Section, Skill, Take, Tally, Video } from './types'
 import { useErrors } from '../state/errors'
 
 async function j<T>(r: Response): Promise<T> {
@@ -89,8 +89,19 @@ export const api = {
     post(`/api/playbooks/${id}/rollback`, { version }).then(r => j<Playbook>(r)),
   runCompose: (analysisId: string) =>
     post(`/api/analyses/${analysisId}/compose`).then(r => j<{ proposal: Proposal }>(r)),
-  rotationExportUrl: (id: string, fmt: 'md' | 'ahk') => `/api/rotations/${id}/export.${fmt}`,
-  playbookExportUrl: (id: string, fmt: 'md' | 'ahk') => `/api/playbooks/${id}/export.${fmt}`,
+
+  startExec: (kind: 'rotation' | 'playbook', id: string, speed = 1.0) =>
+    post('/api/exec/start', { kind, id, speed }).then(r => j<ExecStatus>(r)),
+  execCmd: (cmd: 'pause' | 'resume' | 'stop' | 'step') =>
+    post(`/api/exec/${cmd}`, {}).then(r => j<ExecStatus>(r)),
+  execStatus: () => fetch('/api/exec/status').then(r => j<ExecStatus>(r)),
+  backfeedExec: (analysisId: string) =>
+    post('/api/exec/backfeed', { analysis_id: analysisId }).then(r => j<Take>(r)),
+  captureStart: () => post('/api/capture/start', {}).then(r => j<{ path: string }>(r)),
+  captureStop: () => post('/api/capture/stop', {}).then(r => j<Video>(r)),
+
+  rotationExportUrl: (id: string, fmt: 'md' | 'ahk' | 'plan' | 'razer') => `/api/rotations/${id}/export.${fmt}`,
+  playbookExportUrl: (id: string, fmt: 'md' | 'ahk' | 'plan' | 'razer') => `/api/playbooks/${id}/export.${fmt}`,
 
   videoFileUrl: (id: string) => `/api/videos/${id}/file`,
   spriteUrl: (id: string) => `/api/videos/${id}/sprite`,

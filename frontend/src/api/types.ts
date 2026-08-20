@@ -120,3 +120,14 @@ export interface DiscoverResult {
   unmatched: number
   ambiguities: { t_ms: number; skills: string[] }[]
 }
+
+export type ExecState = 'idle' | 'running' | 'paused' | 'stopped' | 'done'
+
+export interface ExecStatus {
+  state: ExecState
+  cursor?: number
+  total?: number
+  title?: string
+  error?: string | null
+  log?: { t_ms: number; action: string; key: string }[]
+}

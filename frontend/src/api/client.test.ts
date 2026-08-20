@@ -66,3 +66,36 @@ test('putPlaybook and export urls', async () => {
   expect(api.playbookExportUrl('pb_1', 'ahk')).toBe('/api/playbooks/pb_1/export.ahk')
   expect(api.rotationExportUrl('rot_1', 'md')).toBe('/api/rotations/rot_1/export.md')
 })
+
+test('startExec posts to exec start endpoint', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ state: 'running', cursor: 0 }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await api.startExec('rotation', 'rot_1', 1.0)
+  const [url, init] = fetchMock.mock.calls[0]
+  expect(url).toBe('/api/exec/start')
+  expect(init.method).toBe('POST')
+  expect(JSON.parse(init.body)).toEqual({ kind: 'rotation', id: 'rot_1', speed: 1.0 })
+})
+
+test('execCmd posts to exec command endpoint', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ state: 'stopped' }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await api.execCmd('stop')
+  const [url, init] = fetchMock.mock.calls[0]
+  expect(url).toBe('/api/exec/stop')
+  expect(init.method).toBe('POST')
+  expect(JSON.parse(init.body)).toEqual({})
+})
+
+test('backfeedExec posts to exec backfeed endpoint', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ id: 'tk_1', idx: 0, marks: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await api.backfeedExec('an_1')
+  const [url, init] = fetchMock.mock.calls[0]
+  expect(url).toBe('/api/exec/backfeed')
+  expect(init.method).toBe('POST')
+  expect(JSON.parse(init.body)).toEqual({ analysis_id: 'an_1' })
+})
