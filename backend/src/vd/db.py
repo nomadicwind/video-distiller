@@ -107,6 +107,44 @@ CREATE TABLE IF NOT EXISTS proposals(
 );
 """
 
+SCHEMA_V3 = """
+CREATE TABLE IF NOT EXISTS playbooks(
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  class TEXT,
+  keymap_id TEXT,
+  keymap_version INTEGER,
+  sections TEXT NOT NULL DEFAULT '[]',
+  derived_from TEXT NOT NULL DEFAULT '[]',
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS playbook_versions(
+  id TEXT PRIMARY KEY,
+  playbook_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  snapshot TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(playbook_id, version)
+);
+"""
+
+PROPOSALS_V3 = """
+ALTER TABLE proposals RENAME TO proposals_old;
+CREATE TABLE proposals(
+  id TEXT PRIMARY KEY,
+  analysis_id TEXT NOT NULL REFERENCES analyses(id),
+  kind TEXT NOT NULL CHECK(kind IN ('rotation','playbook')),
+  payload TEXT NOT NULL,
+  report TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','accepted','rejected')),
+  created_at TEXT NOT NULL
+);
+INSERT INTO proposals SELECT * FROM proposals_old;
+DROP TABLE proposals_old;
+"""
+
 
 def _column_exists(conn: sqlite3.Connection, table: str, col: str) -> bool:
     return any(r["name"] == col for r in conn.execute(f"PRAGMA table_info({table})"))
@@ -121,6 +159,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if not _column_exists(conn, "analyses", "keymap_version"):
             conn.execute("ALTER TABLE analyses ADD COLUMN keymap_version INTEGER")
         conn.execute("PRAGMA user_version = 2")
+        conn.commit()
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version < 3:
+        conn.executescript(SCHEMA_V3)
+        conn.executescript(PROPOSALS_V3)
+        conn.execute("PRAGMA user_version = 3")
         conn.commit()
 
 
