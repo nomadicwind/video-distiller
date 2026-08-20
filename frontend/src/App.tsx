@@ -8,6 +8,7 @@ import { ThumbStrip } from './strip/ThumbStrip'
 import { Timeline } from './timeline/Timeline'
 import { useSession } from './state/store'
 import { EntryPanel } from './panel/EntryPanel'
+import { InferPanel } from './panel/InferPanel'
 import { ErrorBar } from './ErrorBar'
 
 function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
@@ -73,7 +74,10 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
         <ThumbStrip video={video} />
         <Timeline video={video} aggregate={aggregate} />
       </div>
-      <EntryPanel />
+      <div>
+        <EntryPanel />
+        <InferPanel />
+      </div>
     </div>
   )
 }
