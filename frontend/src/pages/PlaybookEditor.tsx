@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { useErrors } from '../state/errors'
 import type { Block, Playbook, PlaybookVersion, Rotation, Section, Skill } from '../api/types'
 
 const swap = <T,>(arr: T[], i: number, j: number): T[] => {
@@ -31,7 +32,15 @@ export function PlaybookEditor({ playbookId, onBack }: {
   }, [playbookId])
   useEffect(() => {
     if (!pb) return
-    void fetch(api.playbookExportUrl(pb.id, tab)).then(r => r.text()).then(setPreview)
+    void fetch(api.playbookExportUrl(pb.id, tab)).then(async r => {
+      if (!r.ok) {
+        const text = await r.text()
+        useErrors.getState().pushError(`Export ${r.status}: ${text.slice(0, 200)}`)
+        setPreview('加载失败')
+        return
+      }
+      return r.text().then(setPreview)
+    })
   }, [pb?.version, tab])  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!pb) return <p>加载中…</p>
