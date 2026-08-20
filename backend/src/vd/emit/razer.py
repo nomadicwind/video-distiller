@@ -20,14 +20,16 @@ def _events_xml(events: list[dict]) -> list[str]:
         if delta > 0:
             lines.append(f'    <Delay ms="{delta}"/>')
         prev_t = ev["t_ms"]
-        key = escape(ev.get("key", ""))
         if ev["action"] == "tap":
-            lines.append(f'    <KeyDown key="{key}"/>')
-            lines.append(f'    <KeyUp key="{key}"/>')
+            raw_key = _one_line(ev.get("key", ""))
+            lines.append(f'    <KeyDown key={quoteattr(raw_key)}/>')
+            lines.append(f'    <KeyUp key={quoteattr(raw_key)}/>')
         elif ev["action"] == "down":
-            lines.append(f'    <KeyDown key="{key}"/>')
+            raw_key = _one_line(ev.get("key", ""))
+            lines.append(f'    <KeyDown key={quoteattr(raw_key)}/>')
         elif ev["action"] == "up":
-            lines.append(f'    <KeyUp key="{key}"/>')
+            raw_key = _one_line(ev.get("key", ""))
+            lines.append(f'    <KeyUp key={quoteattr(raw_key)}/>')
         elif ev["action"] == "wheel":
             lines.append('    <WheelDown/>')
     return lines

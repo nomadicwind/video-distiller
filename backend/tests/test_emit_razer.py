@@ -34,3 +34,31 @@ def test_playbook_razer_warnings_as_comments():
     xml = render_playbook_razer(pb, {"rot_1": ROT}, SKILLS, {})
     assert "<!-- ⚠" in xml
     assert "看血线" in xml
+
+
+def test_razer_key_escaping_with_quotes_and_angles():
+    """Verify keys with " and < are properly escaped in XML attributes."""
+    sk_special = {
+        "sk_special": {
+            "id": "sk_special",
+            "name": "特殊键",
+            "pattern": [{"op": "tap", "key": 'F"/><Injected foo="bar'}]
+        }
+    }
+    rot = {
+        "id": "rot_special",
+        "name": "特殊循环",
+        "body": [{"skill": "sk_special"}]
+    }
+    xml = render_rotation_razer(rot, sk_special, {})
+    # Verify XML is well-formed and the raw quote/angle characters don't appear
+    # inside an unquoted attribute boundary
+    assert 'key=' in xml
+    # The key should be properly escaped via quoteattr, not raw
+    assert 'key="F' not in xml  # Raw quote shouldn't start an attribute
+    # Verify the XML can be parsed (well-formed)
+    import xml.etree.ElementTree as ET
+    try:
+        ET.fromstring(xml)
+    except ET.ParseError as e:
+        raise AssertionError(f"Generated XML is malformed: {e}\nXML:\n{xml}")
