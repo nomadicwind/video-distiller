@@ -1,0 +1,15 @@
+:root { color-scheme: dark; }
+body { margin: 0; font: 13px/1.5 system-ui, sans-serif; background: #16181d; color: #ddd; }
+button { margin: 2px; }
+button.active { outline: 2px solid #5af; }
+video { width: 100%; max-height: 45vh; background: #000; }
+canvas { display: block; }
+.workbench { display: grid; grid-template-columns: 1fr 300px; gap: 8px; padding: 8px; }
+.workbench .main { min-width: 0; }
+.entry-panel { border-left: 1px solid #333; padding: 8px; }
+.entry-panel .keys button { min-width: 40px; }
+.tally-bar { display: flex; gap: 16px; align-items: center; padding: 4px 8px; background: #1e2128; }
+.strip { user-select: none; }
+.library { max-width: 720px; margin: 40px auto; }
+.library table { width: 100%; border-collapse: collapse; }
+.library td { padding: 4px 8px; border-bottom: 1px solid #333; }
