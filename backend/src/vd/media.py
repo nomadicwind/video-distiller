@@ -43,3 +43,31 @@ def transcode_cfr(src: Path, dst: Path, fps: int) -> None:
         "-pix_fmt", "yuv420p", "-c:a", "aac",
         "-movflags", "+faststart", str(dst),
     ])
+
+
+def probe_image(path: Path) -> dict:
+    out = _run([
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "stream=width,height", "-of", "json", str(path),
+    ]).stdout
+    s = json.loads(out)["streams"][0]
+    return {"width": int(s["width"]), "height": int(s["height"])}
+
+
+def make_sprite(work: Path, out_jpg: Path, duration_ms: int) -> dict:
+    """横向单行 sprite：每 interval 秒一张 96px 宽缩略图，tile 成一张 JPEG。
+    interval 规则保证总张数 ≤600（JPEG 宽度上限约 65500px）。"""
+    interval = thumb_interval_s(duration_ms)
+    count = max(1, math.ceil(duration_ms / 1000 / interval))
+    _run([
+        "ffmpeg", "-y", "-i", str(work),
+        "-vf", f"fps=1/{interval},scale=96:-2,tile={count}x1",
+        "-frames:v", "1", str(out_jpg),
+    ])
+    meta = probe_image(out_jpg)
+    return {
+        "sprite_interval_s": interval,
+        "sprite_count": count,
+        "thumb_w": 96,
+        "thumb_h": meta["height"],
+    }

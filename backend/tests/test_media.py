@@ -29,3 +29,15 @@ def test_transcode_cfr_produces_target_fps(sample_video, tmp_path):
     info = media.probe(out)
     assert abs(info["fps"] - 30.0) < 0.1
     assert abs(info["duration_ms"] - 2000) < 300
+
+
+def test_make_sprite(sample_video, tmp_path):
+    out = tmp_path / "sprite.jpg"
+    meta = media.make_sprite(sample_video, out, 2000)
+    assert out.exists()
+    assert meta["sprite_interval_s"] == 1
+    assert meta["sprite_count"] == 2
+    assert meta["thumb_w"] == 96
+    img = media.probe_image(out)
+    assert img["width"] == 96 * 2
+    assert img["height"] == meta["thumb_h"]
