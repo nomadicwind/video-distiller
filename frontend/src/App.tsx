@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from './api/client'
-import type { Video, Aggregate } from './api/types'
+import type { Video, Aggregate, Keymap } from './api/types'
 import { useHotkeys } from './hotkeys'
 import { Player } from './player/Player'
 import { TallyBar } from './tally/TallyBar'
@@ -17,6 +17,7 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   const [aggregate, setAggregate] = useState<Aggregate | null>(null)
   const showAggregate = useSession(st => st.showAggregate)
   const laneId = useSession(st => st.laneId)
+  const [keymaps, setKeymaps] = useState<Keymap[]>([])
   useHotkeys(video)
 
   useEffect(() => {
@@ -37,11 +38,36 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
     return () => { ignore = true }
   }, [showAggregate, laneId])
 
+  useEffect(() => { void api.listKeymaps().then(setKeymaps) }, [])
+
   if (!analysis || analysis.video_id !== video.id) return <p>加载中…</p>
+  const latestByIdEntries = [...new Map(
+    keymaps.sort((a, b) => a.version - b.version).map(k => [k.id, k])).entries()]
   return (
     <div className="workbench">
       <div className="main">
-        <p><button onClick={onBack}>← 返回</button> {analysis.name}</p>
+        <p>
+          <button onClick={onBack}>← 返回</button> {analysis.name}
+          <select
+            value={analysis.keymap_id ? `${analysis.keymap_id}@${analysis.keymap_version}` : ''}
+            onChange={async e => {
+              const [kid, ver] = e.target.value.split('@')
+              if (!kid) return
+              await api.bindKeymap(analysis.id, kid, Number(ver))
+              void api.getAnalysis(analysis.id).then(setAnalysis)
+            }}>
+            <option value="">未绑定键位</option>
+            {latestByIdEntries.map(([id, k]) => (
+              <option key={id} value={`${id}@${k.version}`}>{id} v{k.version}</option>
+            ))}
+            {analysis.keymap_id && !latestByIdEntries.some(([id, k]) =>
+              id === analysis.keymap_id && k.version === analysis.keymap_version) && (
+              <option value={`${analysis.keymap_id}@${analysis.keymap_version}`}>
+                {analysis.keymap_id} v{analysis.keymap_version}（钉住的旧版）
+              </option>
+            )}
+          </select>
+        </p>
         <Player videoId={video.id} fps={video.fps ?? 30} durationMs={video.duration_ms ?? 0} />
         <TallyBar />
         <ThumbStrip video={video} />
