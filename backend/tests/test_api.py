@@ -81,3 +81,15 @@ def test_take_and_tally_endpoints(client, analysis):
     client.delete(f"/api/analyses/{analysis['id']}/tally")
     tree = client.get(f"/api/analyses/{analysis['id']}").json()
     assert tree["tally"] == []
+
+
+def test_lane_aggregate_endpoint(client, analysis):
+    lane = analysis["lanes"][0]
+    take1 = lane["takes"][0]
+    take2 = client.post(f"/api/lanes/{lane['id']}/takes").json()
+    for tid, t in ((take1["id"], 100), (take2["id"], 120)):
+        client.post(f"/api/takes/{tid}/marks",
+                    json={"t_ms": t, "kind": "input", "label": "Q"})
+    r = client.get(f"/api/lanes/{lane['id']}/aggregate").json()
+    assert r["n_takes"] == 2
+    assert r["aggregated"][0]["t_ms"] == 110

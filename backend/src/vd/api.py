@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from vd import db, ingest, store
+from vd import aggregate as agg, db, ingest, store
 from vd.config import data_root
 
 app = FastAPI(title="Video Distiller")
@@ -156,3 +156,14 @@ def add_tally(analysis_id: str, req: TallyReq, conn=Depends(get_conn)):
 def clear_tally(analysis_id: str, conn=Depends(get_conn)):
     store.clear_tally(conn, analysis_id)
     return {"ok": True}
+
+
+@app.get("/api/lanes/{lane_id}/aggregate")
+def lane_aggregate(lane_id: str, window_ms: int = 300, conn=Depends(get_conn)):
+    takes = []
+    for t in conn.execute(
+            "SELECT id FROM takes WHERE lane_id=? ORDER BY idx", (lane_id,)):
+        marks = [dict(r) for r in conn.execute(
+            "SELECT * FROM marks WHERE take_id=? ORDER BY t_ms", (t["id"],))]
+        takes.append(marks)
+    return agg.aggregate_lane(takes, window_ms=window_ms)
