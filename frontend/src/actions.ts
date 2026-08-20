@@ -33,3 +33,10 @@ export async function insertAtPlayhead(
   })
   useSession.getState().insertMarkLocal(mark)
 }
+
+export async function tallyAtPlayhead(): Promise<void> {
+  const s = useSession.getState()
+  if (!s.analysis) return
+  const t = await api.addTally(s.analysis.id, Math.round(s.playheadMs))
+  useSession.getState().addTallyLocal(t)
+}

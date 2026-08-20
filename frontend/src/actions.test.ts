@@ -17,10 +17,12 @@ vi.mock('./api/client', () => ({
         kind: m.kind as 'input' | 'release', label: (m.label as string) ?? null,
         provenance: 'human_manual', confidence: 1,
       } satisfies Mark)),
+    addTally: vi.fn((analysisId: string, t_ms: number) =>
+      Promise.resolve({ id: 'tm_new', analysis_id: analysisId, t_ms })),
   },
 }))
 
-import { deleteSelected, insertAtPlayhead, nudgeSelected, toggleHolding } from './actions'
+import { deleteSelected, insertAtPlayhead, nudgeSelected, tallyAtPlayhead, toggleHolding } from './actions'
 import { api } from './api/client'
 
 const tree: AnalysisTree = {
@@ -64,4 +66,11 @@ test('insertAtPlayhead posts mark at current playhead into current take', async 
   expect(api.newMark).toHaveBeenCalledWith('tk_a', { t_ms: 1235, kind: 'input', label: 'Q' })
   const marks = useSession.getState().analysis!.lanes[0].takes[0].marks
   expect(marks.some(m => m.id === 'mk_new')).toBe(true)
+})
+
+test('tallyAtPlayhead posts marker and stores locally', async () => {
+  useSession.getState().setPlayhead(2500.2)
+  await tallyAtPlayhead()
+  expect(api.addTally).toHaveBeenCalledWith('an_1', 2500)
+  expect(useSession.getState().analysis!.tally.map(t => t.t_ms)).toEqual([2500])
 })

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { deleteSelected, insertAtPlayhead, nudgeSelected } from './actions'
+import { deleteSelected, insertAtPlayhead, nudgeSelected, tallyAtPlayhead } from './actions'
 import type { Video } from './api/types'
 import { frameStep, videoEl } from './player/Player'
 import { useSession } from './state/store'
@@ -34,8 +34,10 @@ export function useHotkeys(video: Video): void {
         void deleteSelected()
       } else if (e.key === 'e' || e.key === 'E') {
         st.toggleEntryMode()
+      } else if (e.key === 't' || e.key === 'T') {
+        void tallyAtPlayhead()
       }
-      // 后续任务在此追加：T（任务 21）；A（任务 22）
+      // 后续任务在此追加：A（任务 22）
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
