@@ -6,6 +6,7 @@ import { Player } from './player/Player'
 import { ThumbStrip } from './strip/ThumbStrip'
 import { Timeline } from './timeline/Timeline'
 import { useSession } from './state/store'
+import { EntryPanel } from './panel/EntryPanel'
 
 function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   const analysis = useSession(s => s.analysis)
@@ -28,7 +29,7 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
         <Timeline video={video} aggregate={null} />
         {/* 后续任务在此依次挂载：TallyBar（21）*/}
       </div>
-      {/* EntryPanel（任务 20）挂载于此 */}
+      <EntryPanel />
     </div>
   )
 }

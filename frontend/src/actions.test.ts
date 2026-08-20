@@ -11,10 +11,16 @@ vi.mock('./api/client', () => ({
         kind: 'input', label: '2', provenance: 'human_edited', confidence: 1,
       } satisfies Mark)),
     deleteMark: vi.fn(() => Promise.resolve({ ok: true })),
+    newMark: vi.fn((takeId: string, m: Record<string, unknown>) =>
+      Promise.resolve({
+        id: 'mk_new', take_id: takeId, t_ms: m.t_ms as number, end_ms: null,
+        kind: m.kind as 'input' | 'release', label: (m.label as string) ?? null,
+        provenance: 'human_manual', confidence: 1,
+      } satisfies Mark)),
   },
 }))
 
-import { deleteSelected, nudgeSelected, toggleHolding } from './actions'
+import { deleteSelected, insertAtPlayhead, nudgeSelected, toggleHolding } from './actions'
 import { api } from './api/client'
 
 const tree: AnalysisTree = {
@@ -50,4 +56,12 @@ test('deleteSelected removes mark', async () => {
 test('toggleHolding applies patch result', async () => {
   await toggleHolding('m1', { end_ms: 400 })
   expect(useSession.getState().analysis!.lanes[0].takes[0].marks[0].end_ms).toBe(400)
+})
+
+test('insertAtPlayhead posts mark at current playhead into current take', async () => {
+  useSession.getState().setPlayhead(1234.6)
+  await insertAtPlayhead('input', 'Q')
+  expect(api.newMark).toHaveBeenCalledWith('tk_a', { t_ms: 1235, kind: 'input', label: 'Q' })
+  const marks = useSession.getState().analysis!.lanes[0].takes[0].marks
+  expect(marks.some(m => m.id === 'mk_new')).toBe(true)
 })

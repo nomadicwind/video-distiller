@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
-import { deleteSelected, nudgeSelected } from './actions'
+import { deleteSelected, insertAtPlayhead, nudgeSelected } from './actions'
 import type { Video } from './api/types'
 import { frameStep, videoEl } from './player/Player'
+import { useSession } from './state/store'
 
 export function useHotkeys(video: Video): void {
   const fps = video.fps ?? 30
@@ -10,6 +11,13 @@ export function useHotkeys(video: Video): void {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      const st = useSession.getState()
+      if (st.entryMode && /^[a-z0-9]$/i.test(e.key)) {
+        // 录入模式下字母/数字优先作为 L0 打点，不再触发其他单键快捷键
+        e.preventDefault()
+        void insertAtPlayhead('input', e.key.toUpperCase())
+        return
+      }
       if (e.key === ' ') {
         e.preventDefault()
         const v = videoEl()
@@ -24,8 +32,10 @@ export function useHotkeys(video: Video): void {
         void nudgeSelected(10)
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         void deleteSelected()
+      } else if (e.key === 'e' || e.key === 'E') {
+        st.toggleEntryMode()
       }
-      // 后续任务在此追加：录入模式与 E（任务 20）；T（任务 21）；A（任务 22）
+      // 后续任务在此追加：T（任务 21）；A（任务 22）
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

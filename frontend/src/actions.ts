@@ -22,3 +22,14 @@ export async function toggleHolding(
   const updated = await api.patchMark(markId, patch)
   useSession.getState().updateMarkLocal(updated)
 }
+
+export async function insertAtPlayhead(
+  kind: 'input' | 'release', label: string | null,
+): Promise<void> {
+  const s = useSession.getState()
+  if (!s.takeId) return
+  const mark = await api.newMark(s.takeId, {
+    t_ms: Math.round(s.playheadMs), kind, label,
+  })
+  useSession.getState().insertMarkLocal(mark)
+}
