@@ -14,6 +14,7 @@ import { CatalogPage } from './pages/CatalogPage'
 import { KeymapPage } from './pages/KeymapPage'
 import { PlaybooksPage } from './pages/PlaybooksPage'
 import { PlaybookEditor } from './pages/PlaybookEditor'
+import { ExecPage } from './pages/ExecPage'
 
 function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   const analysis = useSession(s => s.analysis)
@@ -86,7 +87,7 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   )
 }
 
-function VideoLibrary({ onOpen, onCatalog, onKeymap, onPlaybooks }: { onOpen: (v: Video) => void; onCatalog: () => void; onKeymap: () => void; onPlaybooks: () => void }) {
+function VideoLibrary({ onOpen, onCatalog, onKeymap, onPlaybooks, onExec }: { onOpen: (v: Video) => void; onCatalog: () => void; onKeymap: () => void; onPlaybooks: () => void; onExec: () => void }) {
   const [videos, setVideos] = useState<Video[]>([])
   const [url, setUrl] = useState('')
   const refresh = () => { void api.listVideos().then(setVideos) }
@@ -104,6 +105,7 @@ function VideoLibrary({ onOpen, onCatalog, onKeymap, onPlaybooks }: { onOpen: (v
         <button onClick={onCatalog}>技能目录</button>
         <button onClick={onKeymap}>键位设置</button>
         <button onClick={onPlaybooks}>循环与方案</button>
+        <button onClick={onExec}>执行台</button>
       </p>
       <p>
         上传视频：
@@ -140,7 +142,7 @@ function VideoLibrary({ onOpen, onCatalog, onKeymap, onPlaybooks }: { onOpen: (v
 
 export default function App() {
   const [video, setVideo] = useState<Video | null>(null)
-  const [page, setPage] = useState<'library' | 'catalog' | 'keymap' | 'playbooks'>('library')
+  const [page, setPage] = useState<'library' | 'catalog' | 'keymap' | 'playbooks' | 'exec'>('library')
   const [editingPlaybook, setEditingPlaybook] = useState<string | null>(null)
   if (video) return <><ErrorBar /><Workbench video={video} onBack={() => setVideo(null)} /></>
   if (editingPlaybook) return <><ErrorBar />
@@ -149,7 +151,8 @@ export default function App() {
   if (page === 'keymap') return <><ErrorBar /><KeymapPage onBack={() => setPage('library')} /></>
   if (page === 'playbooks') return <><ErrorBar />
     <PlaybooksPage onBack={() => setPage('library')} onEdit={setEditingPlaybook} /></>
+  if (page === 'exec') return <><ErrorBar /><ExecPage onBack={() => setPage('library')} /></>
   return <><ErrorBar /><VideoLibrary onOpen={setVideo}
     onCatalog={() => setPage('catalog')} onKeymap={() => setPage('keymap')}
-    onPlaybooks={() => setPage('playbooks')} /></>
+    onPlaybooks={() => setPage('playbooks')} onExec={() => setPage('exec')} /></>
 }
