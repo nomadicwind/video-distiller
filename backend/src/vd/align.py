@@ -47,3 +47,23 @@ def complete_spans(l1_marks: list[dict], skills_by_name: dict) -> list[dict]:
                         "proposed_end_ms": m["t_ms"] + sk["cast_ms"] + sk["anim_ms"],
                         "confidence": 0.6})
     return out
+
+
+def infer_keymap(links: list[dict], skills_by_name: dict) -> list[dict]:
+    """共现统计反推键位（spec §7.2c）。"""
+    counts: dict[str, dict[str, int]] = {}
+    for ln in links:
+        sk = skills_by_name.get(ln["label"])
+        if sk is None:
+            continue
+        by_key = counts.setdefault(sk["id"], {})
+        by_key[ln["l0_key"]] = by_key.get(ln["l0_key"], 0) + 1
+    suggestions = []
+    for sid in sorted(counts):
+        by_key = counts[sid]
+        total = sum(by_key.values())
+        key, n = max(by_key.items(), key=lambda kv: kv[1])
+        if n >= 2 and n / total > 0.6:
+            suggestions.append({"skill_id": sid, "key": key,
+                                "support": n, "total": total})
+    return suggestions

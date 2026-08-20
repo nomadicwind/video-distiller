@@ -1,4 +1,4 @@
-from vd.align import align_l1, complete_spans
+from vd.align import align_l1, complete_spans, infer_keymap
 
 
 def op(t, key):
@@ -48,3 +48,24 @@ def test_complete_spans():
                           l1(3000, "火球术", end=3500)], SKILLS)
     assert out == [{"mark_id": "m1", "t_ms": 1000,
                     "proposed_end_ms": 2120, "confidence": 0.6}]
+
+
+def link(label, key):
+    return {"l1_t_ms": 0, "label": label, "l0_key": key, "l0_t_ms": 0, "dt_ms": 0}
+
+
+def test_infer_dominant_key():
+    links = [link("火球术", "2"), link("火球术", "2"), link("火球术", "3")]
+    out = infer_keymap(links, SKILLS)
+    assert out == [{"skill_id": "sk_fb", "key": "2", "support": 2, "total": 3}]
+
+
+def test_no_suggestion_below_threshold():
+    assert infer_keymap([link("火球术", "2")], SKILLS) == []          # 仅 1 次
+    links = [link("火球术", "2"), link("火球术", "3"),
+             link("火球术", "2"), link("火球术", "3")]
+    assert infer_keymap(links, SKILLS) == []                          # 0.5 不过 0.6
+
+
+def test_unknown_label_ignored():
+    assert infer_keymap([link("未知", "2"), link("未知", "2")], SKILLS) == []
