@@ -3,15 +3,38 @@ import { currentTake, useSession } from './state/store'
 
 export async function nudgeSelected(deltaMs: number): Promise<void> {
   const s = useSession.getState()
-  const mark = currentTake(s)?.marks.find(m => m.id === s.selectedMarkId)
+  const take = currentTake(s)
+  const mark = take?.marks.find(m => m.id === s.selectedMarkId)
   if (!mark) return
-  const updated = await api.patchMark(mark.id, { t_ms: mark.t_ms + deltaMs })
+  // A previous mark may be "holding" until this mark's current t_ms
+  // (a.end_ms === mark.t_ms, see timeline/layout.ts `intervals`). Moving
+  // the endpoint without moving the hold would strand a.end_ms in the DB
+  // as an orphan the UI no longer renders as held.
+  const holder = take?.marks.find(m => m.id !== mark.id && m.end_ms === mark.t_ms) ?? null
+  const newTMs = mark.t_ms + deltaMs
+  const updated = await api.patchMark(mark.id, { t_ms: newTMs })
   useSession.getState().updateMarkLocal(updated)
+  if (holder) {
+    const updatedHolder = await api.patchMark(holder.id, { end_ms: newTMs })
+    useSession.getState().updateMarkLocal(updatedHolder)
+  }
 }
 
 export async function deleteSelected(): Promise<void> {
   const s = useSession.getState()
   if (!s.selectedMarkId) return
+  const take = currentTake(s)
+  const mark = take?.marks.find(m => m.id === s.selectedMarkId)
+  // Same orphan-hold hazard as nudgeSelected: if a previous mark holds
+  // until the mark being deleted, clear its end_ms first so it doesn't
+  // point at a t_ms that no longer belongs to any mark.
+  const holder = mark
+    ? take?.marks.find(m => m.id !== mark.id && m.end_ms === mark.t_ms) ?? null
+    : null
+  if (holder) {
+    const updatedHolder = await api.patchMark(holder.id, { clear_end: true })
+    useSession.getState().updateMarkLocal(updatedHolder)
+  }
   await api.deleteMark(s.selectedMarkId)
   useSession.getState().removeMarkLocal(s.selectedMarkId)
 }

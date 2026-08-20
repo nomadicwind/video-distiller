@@ -36,6 +36,22 @@ const tree: AnalysisTree = {
   }],
 }
 
+// m1 holds until m2 (m1.end_ms === m2.t_ms) — used to test that the holder
+// stays attached when the held endpoint (m2) is nudged or deleted.
+const treeWithHold: AnalysisTree = {
+  id: 'an_1', video_id: 'v', name: 'n', tally: [],
+  lanes: [{
+    id: 'ln_0', layer: 'L0',
+    takes: [{
+      id: 'tk_a', idx: 1,
+      marks: [
+        { id: 'm1', take_id: 'tk_a', t_ms: 100, end_ms: 300, kind: 'input', label: '2', provenance: 'human_manual', confidence: 1 },
+        { id: 'm2', take_id: 'tk_a', t_ms: 300, end_ms: null, kind: 'input', label: '3', provenance: 'human_manual', confidence: 1 },
+      ],
+    }],
+  }],
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   useSession.getState().setAnalysis(structuredClone(tree))
@@ -73,4 +89,26 @@ test('tallyAtPlayhead posts marker and stores locally', async () => {
   await tallyAtPlayhead()
   expect(api.addTally).toHaveBeenCalledWith('an_1', 2500)
   expect(useSession.getState().analysis!.tally.map(t => t.t_ms)).toEqual([2500])
+})
+
+test('nudgeSelected also patches the holder mark end_ms when it moves the held endpoint', async () => {
+  useSession.getState().setAnalysis(structuredClone(treeWithHold))
+  useSession.getState().selectMark('m2')
+  await nudgeSelected(10)
+  expect(api.patchMark).toHaveBeenCalledWith('m2', { t_ms: 310 })
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { end_ms: 310 })
+  const take = useSession.getState().analysis!.lanes[0].takes[0]
+  expect(take.marks.find(m => m.id === 'm1')!.end_ms).toBe(310)
+  expect(take.marks.find(m => m.id === 'm2')!.t_ms).toBe(310)
+})
+
+test('deleteSelected clears the holder mark end_ms before deleting the held endpoint', async () => {
+  useSession.getState().setAnalysis(structuredClone(treeWithHold))
+  useSession.getState().selectMark('m2')
+  await deleteSelected()
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { clear_end: true })
+  expect(api.deleteMark).toHaveBeenCalledWith('m2')
+  const take = useSession.getState().analysis!.lanes[0].takes[0]
+  expect(take.marks.map(m => m.id)).toEqual(['m1'])
+  expect(take.marks[0].end_ms).toBeNull()
 })

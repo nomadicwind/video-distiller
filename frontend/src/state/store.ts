@@ -11,6 +11,7 @@ export interface Session {
   showAggregate: boolean
 
   setAnalysis: (a: AnalysisTree) => void
+  clearAnalysis: () => void
   selectLane: (laneId: string) => void
   selectTake: (takeId: string) => void
   addTakeLocal: (laneId: string, take: Take) => void
@@ -45,6 +46,13 @@ export const useSession = create<Session>((set, get) => ({
     const take = lane ? lane.takes[lane.takes.length - 1] : null
     set({ analysis: a, laneId: lane?.id ?? null, takeId: take?.id ?? null, selectedMarkId: null })
   },
+  // Clears the per-video session window. `entryMode` is intentionally left
+  // untouched — it's a persistent UI preference, not video-scoped state, so
+  // switching videos shouldn't silently drop the annotator out of it.
+  clearAnalysis: () => set({
+    analysis: null, laneId: null, takeId: null, selectedMarkId: null,
+    playheadMs: 0, showAggregate: false,
+  }),
   selectLane: laneId => {
     const lane = get().analysis?.lanes.find(l => l.id === laneId)
     const take = lane?.takes[lane.takes.length - 1]

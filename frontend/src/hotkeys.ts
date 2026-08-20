@@ -9,11 +9,21 @@ export function useHotkeys(video: Video): void {
   const durationMs = video.duration_ms ?? 0
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      // Only genuine text-entry targets swallow hotkeys. Radio/checkbox/
+      // button/range/file inputs (e.g. the lane radios and the entry-mode
+      // checkbox in EntryPanel) must not — focusing one shouldn't kill
+      // every hotkey until the user clicks elsewhere.
+      const target = e.target as HTMLElement
+      if (target.tagName === 'TEXTAREA') return
+      if (target instanceof HTMLInputElement
+          && !['radio', 'checkbox', 'button', 'range', 'file'].includes(target.type)) return
       const st = useSession.getState()
-      if (st.entryMode && /^[a-z0-9]$/i.test(e.key)) {
+      const lane = st.analysis?.lanes.find(l => l.id === st.laneId)
+      if (st.entryMode && lane?.layer === 'L0' && /^[a-z0-9]$/i.test(e.key)) {
         // 录入模式下字母/数字优先作为 L0 打点，不再触发其他单键快捷键
+        // (only while the current lane is L0 — other lanes don't render
+        // the entry-mode panel/exit checkbox, so interception there would
+        // trap the user with no way to turn it off from that lane)
         e.preventDefault()
         void insertAtPlayhead('input', e.key.toUpperCase())
         return

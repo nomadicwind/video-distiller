@@ -12,6 +12,7 @@ import { EntryPanel } from './panel/EntryPanel'
 function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   const analysis = useSession(s => s.analysis)
   const setAnalysis = useSession(s => s.setAnalysis)
+  const clearAnalysis = useSession(s => s.clearAnalysis)
   const [aggregate, setAggregate] = useState<Aggregate | null>(null)
   const showAggregate = useSession(st => st.showAggregate)
   const laneId = useSession(st => st.laneId)
@@ -21,7 +22,12 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
     api.listAnalyses(video.id)
       .then(list => (list.length ? api.getAnalysis(list[0].id) : api.createAnalysis(video.id)))
       .then(setAnalysis)
-  }, [video.id, setAnalysis])
+    // The Zustand store is a global singleton, so the previous video's
+    // analysis otherwise lingers (and stays hotkey-writable) until the
+    // fetch above resolves. Clear it on unmount/video change so a stale
+    // window is never rendered or written into.
+    return () => { clearAnalysis() }
+  }, [video.id, setAnalysis, clearAnalysis])
 
   useEffect(() => {
     if (!showAggregate || !laneId) { setAggregate(null); return }
@@ -30,7 +36,7 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
     return () => { ignore = true }
   }, [showAggregate, laneId])
 
-  if (!analysis) return <p>加载中…</p>
+  if (!analysis || analysis.video_id !== video.id) return <p>加载中…</p>
   return (
     <div className="workbench">
       <div className="main">
