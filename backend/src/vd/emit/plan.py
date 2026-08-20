@@ -6,7 +6,16 @@ def _ev(t: int, action: str, key: str = "") -> dict:
     return {"t_ms": t, "action": action, "key": key}
 
 
-def _op_events(item: dict, t: int, warnings: list[str]) -> tuple[list[dict], int]:
+def _chord_events(parts: list[str], t: int) -> list[dict]:
+    evs = [_ev(t, "down", parts[0])]
+    for k in parts[1:]:
+        evs.append(_ev(t, "tap", k))
+    evs.append(_ev(t, "up", parts[0]))
+    return evs
+
+
+def _op_events(item: dict, t: int, warnings: list[str], skills_by_id: dict,
+               binds: dict, visiting: set[str]) -> tuple[list[dict], int]:
     """单个 op 项 → 事件列表 + 推进后的时钟。与 emit/ahk._op_lines 语义对齐。"""
     op = item.get("op")
     if op == "tap":
@@ -21,10 +30,22 @@ def _op_events(item: dict, t: int, warnings: list[str]) -> tuple[list[dict], int
         keys = item.get("keys")
         if keys is None:
             keys = (item.get("key") or "").split("+")
-        evs = [_ev(t, "down", keys[0])]
-        for k in keys[1:]:
-            evs.append(_ev(t, "tap", k))
-        evs.append(_ev(t, "up", keys[0]))
+        return _chord_events(keys, t), t
+    if op == "skill":
+        ref = item.get("ref")
+        if ref is None:
+            warnings.append(f"技能引用缺少 ref，已跳过：{item!r}")
+            return [], t
+        if ref in visiting:
+            warnings.append(f"技能引用成环，已跳过：{ref}")
+            return [], t
+        sk = skills_by_id.get(ref)
+        if sk is None:
+            warnings.append(f"未知技能 {ref}，已跳过")
+            return [], t
+        visiting.add(ref)
+        evs, t = _skill_events(sk, binds, t, warnings, skills_by_id, visiting)
+        visiting.discard(ref)
         return evs, t
     if op == "wheel":
         return [_ev(t, "wheel")], t
@@ -32,21 +53,18 @@ def _op_events(item: dict, t: int, warnings: list[str]) -> tuple[list[dict], int
     return [], t
 
 
-def _chord_events(parts: list[str], t: int) -> list[dict]:
-    evs = [_ev(t, "down", parts[0])]
-    for k in parts[1:]:
-        evs.append(_ev(t, "tap", k))
-    evs.append(_ev(t, "up", parts[0]))
-    return evs
-
-
 def _skill_events(skill: dict, binds: dict, t: int,
-                  warnings: list[str]) -> tuple[list[dict], int]:
+                  warnings: list[str], skills_by_id: dict = None,
+                  visiting: set[str] = None) -> tuple[list[dict], int]:
+    if skills_by_id is None:
+        skills_by_id = {}
+    if visiting is None:
+        visiting = set()
     pattern = skill.get("pattern") or []
     if pattern:
         evs: list[dict] = []
         for item in pattern:
-            got, t = _op_events(item, t, warnings)
+            got, t = _op_events(item, t, warnings, skills_by_id, binds, visiting)
             evs.extend(got)
         return evs, t
     keys = binds.get(skill["id"]) or []
@@ -62,18 +80,19 @@ def _skill_events(skill: dict, binds: dict, t: int,
 def _rotation_events(rotation: dict, skills_by_id: dict, binds: dict, t: int,
                      warnings: list[str]) -> tuple[list[dict], int]:
     evs: list[dict] = []
+    visiting: set[str] = set()
     for item in rotation["body"]:
         if "skill" in item:
             sk = skills_by_id.get(item["skill"])
             if sk is None:
                 warnings.append(f"未知技能 {item['skill']}，已跳过")
                 continue
-            got, t = _skill_events(sk, binds, t, warnings)
+            got, t = _skill_events(sk, binds, t, warnings, skills_by_id, visiting)
             evs.extend(got)
         elif "gap" in item:
             t += int(item["gap"])
         elif "op" in item:
-            got, t = _op_events(item, t, warnings)
+            got, t = _op_events(item, t, warnings, skills_by_id, binds, visiting)
             evs.extend(got)
         else:
             warnings.append(f"循环体未知项已跳过：{item!r}")
@@ -86,6 +105,7 @@ def flatten_events(sections: list, rotations_by_id: dict, skills_by_id: dict,
     manual_loops: list[str] = []
     warnings: list[str] = []
     t = 0
+    visiting: set[str] = set()
     for sec in sections:
         for block in sec.get("body", []):
             if block.get("confidence", 1.0) < 0.7:
@@ -98,7 +118,7 @@ def flatten_events(sections: list, rotations_by_id: dict, skills_by_id: dict,
                 if sk is None:
                     warnings.append(f"未知技能 {block['skill']}，已跳过")
                     continue
-                got, t = _skill_events(sk, binds, t, warnings)
+                got, t = _skill_events(sk, binds, t, warnings, skills_by_id, visiting)
                 events.extend(got)
             elif "gap" in block:
                 t += int(block["gap"])

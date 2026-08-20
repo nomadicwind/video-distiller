@@ -85,3 +85,49 @@ def test_render_rotation_plan_shape():
     doc = json.loads(render_rotation_plan(ROTS["rot_1"], SKILLS, {}))
     assert doc["title"] == "循环：小循环"
     assert doc["events"][0] == {"t_ms": 0, "action": "tap", "key": "1"}
+
+
+def test_composite_skill_op_reference_expands_inline():
+    """Skill pattern with op:skill expands the referenced skill's events."""
+    skills_with_combo = {
+        "sk_a": {"id": "sk_a", "name": "平A", "pattern": [{"op": "tap", "key": "1"}]},
+        "sk_fb": {"id": "sk_fb", "name": "冰火", "pattern": [
+            {"op": "tap", "key": "2"}, {"op": "gap", "ms": 100}]},
+        "sk_combo": {"id": "sk_combo", "name": "冰火连携", "pattern": [
+            {"op": "skill", "ref": "sk_fb"}, {"op": "gap", "ms": 50},
+            {"op": "skill", "ref": "sk_fb"}]},
+    }
+    events, _, warns = flatten_events(
+        [{"name": "s", "body": [{"skill": "sk_combo"}]}], {}, skills_with_combo, {})
+    # sk_fb at t=0: tap 2 (t=0), gap 100 → t=100
+    # gap 50 → t=150
+    # sk_fb at t=150: tap 2 (t=150), gap 100 → t=250
+    assert events == [
+        {"t_ms": 0, "action": "tap", "key": "2"},
+        {"t_ms": 150, "action": "tap", "key": "2"},
+    ]
+    assert warns == []
+
+
+def test_cyclic_skill_reference_no_hang():
+    """Cyclic references are detected and don't cause infinite recursion."""
+    cyclic_skills = {
+        "sk_a": {"id": "sk_a", "name": "A", "pattern": [{"op": "skill", "ref": "sk_b"}]},
+        "sk_b": {"id": "sk_b", "name": "B", "pattern": [{"op": "skill", "ref": "sk_a"}]},
+    }
+    events, _, warns = flatten_events(
+        [{"name": "s", "body": [{"skill": "sk_a"}]}], {}, cyclic_skills, {})
+    assert events == []
+    assert any("成环" in w for w in warns)
+
+
+def test_unknown_skill_ref_skipped_with_warning():
+    """Unknown skill references are skipped with warning."""
+    skills_with_bad_ref = {
+        "sk_bad": {"id": "sk_bad", "name": "坏技能", "pattern": [
+            {"op": "skill", "ref": "sk_unknown"}]},
+    }
+    events, _, warns = flatten_events(
+        [{"name": "s", "body": [{"skill": "sk_bad"}]}], {}, skills_with_bad_ref, {})
+    assert events == []
+    assert any("未知技能" in w or "sk_unknown" in w for w in warns)
