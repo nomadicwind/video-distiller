@@ -6,7 +6,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, U
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from vd import aggregate as agg, db, ingest, store
+from vd import agent, align, aggregate as agg, db, ingest, store, discover, matcher, ops as ops_module
 from vd.config import data_root
 
 app = FastAPI(title="Video Distiller")
@@ -353,3 +353,67 @@ def reject_proposal(proposal_id: str, conn=Depends(get_conn)):
 @app.get("/api/rotations")
 def rotations(conn=Depends(get_conn)):
     return store.list_rotations(conn)
+
+
+def _agent_client():
+    """真实运行返回 None（agent 自建客户端）；测试 monkeypatch 注入 fake。"""
+    return None
+
+
+def _aggregated_lane_marks(conn, lane_id: str) -> list[dict]:
+    takes = []
+    for t in conn.execute(
+            "SELECT id FROM takes WHERE lane_id=? ORDER BY idx", (lane_id,)):
+        takes.append([dict(r) for r in conn.execute(
+            "SELECT * FROM marks WHERE take_id=? ORDER BY t_ms", (t["id"],))])
+    return agg.aggregate_lane(takes)["aggregated"]
+
+
+def _analysis_inputs(conn, analysis_id: str):
+    tree = store.get_analysis_tree(conn, analysis_id)
+    if tree is None:
+        raise HTTPException(404)
+    lanes = {l["layer"]: l for l in tree["lanes"]}
+    l0_ops = ops_module.marks_to_ops(_aggregated_lane_marks(conn, lanes["L0"]["id"]))
+    l1_marks = _aggregated_lane_marks(conn, lanes["L1"]["id"])
+    skills = store.list_skills(conn)
+    binds = {}
+    if tree.get("keymap_id"):
+        km = store.get_keymap(conn, tree["keymap_id"], tree["keymap_version"])
+        binds = km["binds"] if km else {}
+    return tree, l0_ops, l1_marks, skills, binds
+
+
+@app.post("/api/analyses/{analysis_id}/infer")
+def run_infer(analysis_id: str, conn=Depends(get_conn)):
+    _, l0_ops, l1_marks, skills, binds = _analysis_inputs(conn, analysis_id)
+    by_name = {s["name"]: s for s in skills}
+    links, conflicts = align.align_l1(l0_ops, l1_marks, by_name, binds)
+    suggestions = [s for s in align.infer_keymap(links, by_name)
+                   if s["key"] not in (binds.get(s["skill_id"]) or [])]  # 已绑定一致的不再提议
+    return {"links": links, "conflicts": conflicts,
+            "keymap_suggestions": suggestions,
+            "span_proposals": align.complete_spans(l1_marks, by_name)}
+
+
+@app.post("/api/analyses/{analysis_id}/discover")
+def run_discover(analysis_id: str, conn=Depends(get_conn)):
+    _, l0_ops, _, skills, _ = _analysis_inputs(conn, analysis_id)
+    matched = matcher.match_all(l0_ops, skills)
+    skill_names = {s["id"]: s["name"] for s in skills}
+    results = []
+    for cand, report in discover.discover_rotations(matched["tokens"]):
+        naming = agent.name_candidate(cand, skill_names, client=_agent_client())
+        payload = {
+            "name": naming.get("name") or "未命名循环",
+            "note": naming.get("note") or naming.get("error", ""),
+            "body": cand["body"],
+            "occurrences": cand["occurrences"],
+            "param_positions": naming.get("param_positions", []),
+        }
+        results.append(store.create_proposal(
+            conn, analysis_id=analysis_id, kind="rotation",
+            payload=payload, report=report))
+    return {"proposals": results,
+            "unmatched": len(matched["unmatched"]),
+            "ambiguities": matched["ambiguities"]}

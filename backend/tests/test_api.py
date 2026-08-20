@@ -198,3 +198,69 @@ def test_proposal_accept_is_idempotent(client, analysis):
     assert len(client.get("/api/rotations").json()) == 1
     assert client.post(f"/api/proposals/{p['id']}/reject").status_code == 409
     assert client.post("/api/proposals/nope/accept").status_code == 404
+
+
+def _seed_rotation_annotation(client, analysis):
+    """L0 打三轮 [tap Q, tap Q, hold LMB, tap 2]，L1 标三次火球，注册目录与键位。"""
+    sk_wh = client.post("/api/skills", json={"name": "旋风连", "pattern": [
+        {"op": "tap", "key": "Q"}, {"op": "gap", "ms": 300, "tol_ms": 80},
+        {"op": "tap", "key": "Q"}, {"op": "gap", "ms": 200, "tol_ms": 60},
+        {"op": "hold", "button": "LMB", "ms": 300, "tol_ms": 100}]}).json()
+    sk_fb = client.post("/api/skills", json={
+        "name": "火球术", "cast_ms": 400, "anim_ms": 720,
+        "pattern": [{"op": "tap", "key": "2"}]}).json()
+    client.post("/api/keymaps", json={"keymap_id": "km_t", "binds": {
+        sk_fb["id"]: ["2"]}})
+    client.patch(f"/api/analyses/{analysis['id']}/keymap",
+                 json={"keymap_id": "km_t", "version": 1})
+    l0 = analysis["lanes"][0]["takes"][0]
+    l1 = analysis["lanes"][1]["takes"][0]
+    t = 0
+    for _ in range(3):
+        for key, dur in (("Q", None), ("Q", None)):
+            client.post(f"/api/takes/{l0['id']}/marks",
+                        json={"t_ms": t, "kind": "input", "label": key})
+            t += 300
+        client.post(f"/api/takes/{l0['id']}/marks",
+                    json={"t_ms": t - 100, "kind": "input", "label": "LMB",
+                          "end_ms": t + 200})
+        t += 400
+        client.post(f"/api/takes/{l0['id']}/marks",
+                    json={"t_ms": t, "kind": "input", "label": "2"})
+        client.post(f"/api/takes/{l1['id']}/marks",
+                    json={"t_ms": t + 60, "kind": "input", "label": "火球术"})
+        t += 800
+    return sk_wh, sk_fb
+
+
+def test_infer_endpoint(client, analysis):
+    _seed_rotation_annotation(client, analysis)
+    r = client.post(f"/api/analyses/{analysis['id']}/infer")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["links"]) == 3                      # 三次火球都对齐
+    assert not [c for c in body["conflicts"] if c["type"] == "three_way"]
+    assert len(body["span_proposals"]) == 3             # 火球有 cast/anim → 补区间
+    assert body["keymap_suggestions"] == []             # 已绑定一致的键不再提议（API 层过滤）
+
+
+def test_discover_endpoint_persists_proposals(client, analysis, monkeypatch):
+    _seed_rotation_annotation(client, analysis)
+
+    from test_agent import FakeClient, FakeResponse   # 同目录测试模块（pytest rootdir 顶层导入）
+    from vd import api as api_module
+    monkeypatch.setattr(api_module, "_agent_client", lambda: FakeClient(FakeResponse()))
+
+    r = client.post(f"/api/analyses/{analysis['id']}/discover")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["proposals"], "应至少产出一个提案"
+    p = body["proposals"][0]
+    assert p["payload"]["name"] == "单体稳定输出"
+    assert p["report"]["coverage"] > 0
+    stored = client.get(f"/api/analyses/{analysis['id']}/proposals").json()
+    assert len(stored) == len(body["proposals"])
+
+
+def test_infer_404(client):
+    assert client.post("/api/analyses/nope/infer").status_code == 404
