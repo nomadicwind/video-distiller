@@ -45,23 +45,56 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   )
 }
 
-export default function App() {
-  const [video, setVideo] = useState<Video | null>(null)
+function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
   const [videos, setVideos] = useState<Video[]>([])
-  useEffect(() => { api.listVideos().then(setVideos) }, [])
+  const [url, setUrl] = useState('')
+  const refresh = () => { void api.listVideos().then(setVideos) }
 
-  if (video) return <Workbench video={video} onBack={() => setVideo(null)} />
+  useEffect(() => {
+    refresh()
+    const timer = setInterval(refresh, 2000)   // 轮询转码状态
+    return () => clearInterval(timer)
+  }, [])
+
   return (
     <div className="library">
       <h1>Video Distiller</h1>
-      <ul>
-        {videos.map(v => (
-          <li key={v.id}>
-            video-{v.seq} {v.name}（{v.status}）
-            <button disabled={v.status !== 'ready'} onClick={() => setVideo(v)}>打开</button>
-          </li>
-        ))}
-      </ul>
+      <p>
+        上传视频：
+        <input type="file" accept="video/*" onChange={async e => {
+          const f = e.target.files?.[0]
+          if (f) { await api.upload(f); refresh() }
+        }} />
+      </p>
+      <p>
+        <input style={{ width: 320 }} placeholder="B 站视频 URL（抖音请手动下载后上传）"
+          value={url} onChange={e => setUrl(e.target.value)} />
+        <button disabled={!url} onClick={async () => {
+          await api.pull(url); setUrl(''); refresh()
+        }}>拉取</button>
+      </p>
+      <table>
+        <tbody>
+          {videos.map(v => (
+            <tr key={v.id}>
+              <td>video-{v.seq}</td>
+              <td>{v.name}</td>
+              <td>{v.status}{v.error ? `：${v.error}` : ''}</td>
+              <td>{v.fps ?? '—'} fps</td>
+              <td>
+                <button disabled={v.status !== 'ready'} onClick={() => onOpen(v)}>打开</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
+}
+
+export default function App() {
+  const [video, setVideo] = useState<Video | null>(null)
+  return video
+    ? <Workbench video={video} onBack={() => setVideo(null)} />
+    : <VideoLibrary onOpen={setVideo} />
 }
