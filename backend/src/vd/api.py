@@ -326,14 +326,33 @@ def proposals(analysis_id: str, conn=Depends(get_conn)):
     return store.list_proposals(conn, analysis_id)
 
 
+class AcceptReq(BaseModel):
+    sections: list | None = None
+
+
 @app.post("/api/proposals/{proposal_id}/accept")
-def accept_proposal(proposal_id: str, conn=Depends(get_conn)):
+def accept_proposal(proposal_id: str, req: AcceptReq | None = None,
+                    conn=Depends(get_conn)):
     row = conn.execute("SELECT * FROM proposals WHERE id=?", (proposal_id,)).fetchone()
     if row is None:
         raise HTTPException(404)
     if row["status"] != "pending":
         raise HTTPException(409, "proposal 已裁决")
     payload = json.loads(row["payload"])
+    if row["kind"] == "playbook":
+        sections = req.sections if (req and req.sections is not None) else payload["sections"]
+        try:
+            store.validate_sections(sections)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        tree = store.get_analysis_tree(conn, row["analysis_id"])
+        playbook = store.create_playbook(
+            conn, name=payload["name"], sections=sections,
+            keymap_id=tree.get("keymap_id") if tree else None,
+            keymap_version=tree.get("keymap_version") if tree else None,
+            derived_from=[row["analysis_id"]])
+        p = store.set_proposal_status(conn, proposal_id, "accepted")
+        return {"proposal": p, "playbook": playbook}
     try:
         rotation = store.create_rotation(
             conn, name=payload["name"], body=payload["body"],
@@ -426,6 +445,61 @@ def run_discover(analysis_id: str, conn=Depends(get_conn)):
             "ambiguities": matched["ambiguities"]}
 
 
+@app.post("/api/analyses/{analysis_id}/compose")
+def run_compose(analysis_id: str, conn=Depends(get_conn)):
+    tree = store.get_analysis_tree(conn, analysis_id)
+    if tree is None:
+        raise HTTPException(404)
+    rotations = store.list_rotations(conn)
+    if not rotations:
+        raise HTTPException(400, "还没有已接受的循环，先在推断面板接受一个 Rotation")
+    store.delete_pending_proposals(conn, analysis_id, kind="playbook")
+    known = {r["id"] for r in rotations}
+    result = agent.compose_playbook(
+        [{"id": r["id"], "name": r["name"], "note": r.get("note") or ""}
+         for r in rotations],
+        client=_agent_client())
+    unknown_dropped: list[str] = []
+    fallback = not result["ok"]
+    if result["ok"]:
+        name = result["name"]
+        note = ""
+        sections = []
+        used: set[str] = set()
+        for s in result["sections"]:
+            ids = []
+            for rid in s["rotation_ids"]:
+                if rid in known and rid not in used:
+                    ids.append(rid)
+                    used.add(rid)
+                elif rid not in known:
+                    unknown_dropped.append(rid)
+            sections.append({"name": s["name"],
+                             "body": [{"rotation": rid} for rid in ids]})
+        missing = [r["id"] for r in rotations if r["id"] not in used]
+        if missing:
+            target = sections[-1] if sections else None
+            if target is None:
+                sections.append({"name": "主循环", "body": []})
+                target = sections[-1]
+            target["body"] += [{"rotation": rid} for rid in missing]
+        sections = [s for s in sections if s["body"]] or [
+            {"name": "主循环", "body": [{"rotation": r["id"]} for r in rotations]}]
+        missing_appended = len(missing)
+    else:
+        name = "未命名方案"
+        note = result["error"]
+        sections = [{"name": "主循环",
+                     "body": [{"rotation": r["id"]} for r in rotations]}]
+        missing_appended = 0
+    payload = {"name": name, "note": note, "sections": sections}
+    report = {"rotations_used": len(rotations), "unknown_dropped": unknown_dropped,
+              "missing_appended": missing_appended, "fallback": fallback}
+    proposal = store.create_proposal(conn, analysis_id=analysis_id, kind="playbook",
+                                     payload=payload, report=report)
+    return {"proposal": proposal}
+
+
 def _export_context(conn):
     skills_by_id = {s["id"]: s for s in store.list_skills(conn)}
     rotations_by_id = {r["id"]: r for r in store.list_rotations(conn)}
@@ -467,3 +541,47 @@ def export_playbook(playbook_id: str, fmt: str, conn=Depends(get_conn)):
             emit_md.render_playbook_md(pb, rotations_by_id, skills_by_id), fmt)
     return _text_response(
         emit_ahk.render_playbook_ahk(pb, rotations_by_id, skills_by_id, binds), fmt)
+
+
+@app.get("/api/playbooks")
+def playbooks(conn=Depends(get_conn)):
+    return store.list_playbooks(conn)
+
+
+@app.get("/api/playbooks/{playbook_id}")
+def playbook(playbook_id: str, conn=Depends(get_conn)):
+    pb = store.get_playbook(conn, playbook_id)
+    if pb is None:
+        raise HTTPException(404)
+    return pb
+
+
+class PlaybookPut(BaseModel):
+    name: str | None = None
+    sections: list
+
+
+@app.put("/api/playbooks/{playbook_id}")
+def put_playbook(playbook_id: str, req: PlaybookPut, conn=Depends(get_conn)):
+    try:
+        return store.save_playbook(conn, playbook_id, sections=req.sections,
+                                   name=req.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/playbooks/{playbook_id}/versions")
+def playbook_versions(playbook_id: str, conn=Depends(get_conn)):
+    return store.list_playbook_versions(conn, playbook_id)
+
+
+class RollbackReq(BaseModel):
+    version: int
+
+
+@app.post("/api/playbooks/{playbook_id}/rollback")
+def rollback(playbook_id: str, req: RollbackReq, conn=Depends(get_conn)):
+    try:
+        return store.rollback_playbook(conn, playbook_id, req.version)
+    except ValueError as e:
+        raise HTTPException(400, str(e))

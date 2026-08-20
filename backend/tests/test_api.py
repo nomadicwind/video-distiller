@@ -322,3 +322,71 @@ def test_export_routes(client, analysis):
     assert 'Send "{1}"' in rahk.text
     assert client.get(f"/api/playbooks/{pb['id']}/export.pdf").status_code == 400
     assert client.get("/api/playbooks/nope/export.md").status_code == 404
+
+
+def test_compose_endpoint_corrects_and_persists(client, analysis, monkeypatch):
+    from test_compose import FakeComposeClient
+    from vd.agent import PlaybookPlan, SectionPlan
+    from vd import api as api_module, db, store
+    conn = db.connect()
+    rot = store.create_rotation(conn, name="单体稳定输出", body=[],
+                                derived_from=[analysis["id"]])
+    conn.close()
+
+    class Resp:  # 用真实 rotation id 构造 LLM 假返回，附一个未知 id 与一个空段
+        stop_reason = "end_turn"
+        parsed_output = PlaybookPlan(name="法师方案", sections=[
+            SectionPlan(name="开场", rotation_ids=[rot["id"], "rot_ghost"]),
+            SectionPlan(name="空段", rotation_ids=[])])
+
+    monkeypatch.setattr(api_module, "_agent_client", lambda: FakeComposeClient(Resp()))
+    r = client.post(f"/api/analyses/{analysis['id']}/compose")
+    assert r.status_code == 200
+    p = r.json()["proposal"]
+    assert p["kind"] == "playbook"
+    assert p["payload"]["name"] == "法师方案"
+    body_ids = [b["rotation"] for s in p["payload"]["sections"] for b in s["body"]]
+    assert body_ids == [rot["id"]]                     # 未知 id 被丢弃、真实 id 保留
+    assert p["report"]["unknown_dropped"] == ["rot_ghost"]
+    assert all(s["body"] for s in p["payload"]["sections"])   # 空段被丢弃
+    assert p["report"]["fallback"] is False
+
+
+def test_compose_no_rotations_400(client, analysis):
+    r = client.post(f"/api/analyses/{analysis['id']}/compose")
+    assert r.status_code == 400
+
+
+def test_accept_playbook_with_adjudicated_sections(client, analysis):
+    from vd import db, store
+    conn = db.connect()
+    rot = store.create_rotation(conn, name="r", body=[])
+    p = store.create_proposal(conn, analysis_id=analysis["id"], kind="playbook",
+                              payload={"name": "方案A", "note": "",
+                                       "sections": [{"name": "s", "body": [
+                                           {"rotation": rot["id"]},
+                                           {"rotation": rot["id"]}]}]},
+                              report={})
+    conn.close()
+    adjudicated = {"sections": [{"name": "s", "body": [{"rotation": rot["id"]}]}]}
+    r = client.post(f"/api/proposals/{p['id']}/accept", json=adjudicated)
+    assert r.status_code == 200
+    pb = r.json()["playbook"]
+    assert len(pb["sections"][0]["body"]) == 1         # 裁决后的子集生效
+    assert client.get("/api/playbooks").json()[0]["id"] == pb["id"]
+
+
+def test_playbook_routes_roundtrip(client, analysis):
+    _, pb = _make_playbook(client, analysis)
+    got = client.get(f"/api/playbooks/{pb['id']}").json()
+    assert got["version"] == 1
+    upd = client.put(f"/api/playbooks/{pb['id']}",
+                     json={"sections": [{"name": "改", "body": []}]}).json()
+    assert upd["version"] == 2
+    vs = client.get(f"/api/playbooks/{pb['id']}/versions").json()
+    assert [v["version"] for v in vs] == [1, 2]
+    back = client.post(f"/api/playbooks/{pb['id']}/rollback", json={"version": 1}).json()
+    assert back["version"] == 3
+    assert back["sections"][0]["name"] == "唯一段"
+    assert client.put("/api/playbooks/nope",
+                      json={"sections": []}).status_code == 400

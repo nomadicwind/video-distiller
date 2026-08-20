@@ -12,6 +12,14 @@ SYSTEM = (
     "（0 起，按含 gap 在内的 body 数组下标）。没有合适的参数位就给空列表。"
 )
 
+COMPOSE_SYSTEM = (
+    "你是动作游戏攻略专家。给你一组已确认的循环（rotation），"
+    "请把它们编排成一个完整打法方案：给方案起名（≤10字），"
+    "分成若干命名段落（如 开场爆发/稳定输出/收尾），"
+    "每段列出该段使用的 rotation id（按执行顺序）。"
+    "只能使用给定的 id，不要发明新的。"
+)
+
 
 class RotationNaming(BaseModel):
     name: str
@@ -49,5 +57,38 @@ def name_candidate(candidate: dict, skill_names: dict[str, str],
         p = response.parsed_output
         return {"ok": True, "name": p.name, "note": p.note,
                 "param_positions": p.param_positions}
+    except Exception as e:  # noqa: BLE001 —— agent 失败必须被包住（spec §10）
+        return {"ok": False, "error": str(e)}
+
+
+class SectionPlan(BaseModel):
+    name: str
+    rotation_ids: list[str]
+
+
+class PlaybookPlan(BaseModel):
+    name: str
+    sections: list[SectionPlan]
+
+
+def compose_playbook(rotations: list[dict], client=None) -> dict:
+    """LLM 方案编排（spec §7.2f）。只发文本；失败无副作用（spec §10）。"""
+    desc = "\n".join(f"- {r['id']}：{r['name']}" + (f"（{r['note']}）" if r.get("note") else "")
+                     for r in rotations)
+    try:
+        client = client or anthropic.Anthropic()
+        response = client.messages.parse(
+            model=MODEL,
+            max_tokens=2048,
+            system=COMPOSE_SYSTEM,
+            messages=[{"role": "user", "content": f"可用循环：\n{desc}"}],
+            output_format=PlaybookPlan,
+        )
+        if response.stop_reason == "refusal":
+            return {"ok": False, "error": "LLM 拒绝了该请求"}
+        plan = response.parsed_output
+        return {"ok": True, "name": plan.name,
+                "sections": [{"name": s.name, "rotation_ids": s.rotation_ids}
+                             for s in plan.sections]}
     except Exception as e:  # noqa: BLE001 —— agent 失败必须被包住（spec §10）
         return {"ok": False, "error": str(e)}
