@@ -18,7 +18,11 @@ export function InferPanel() {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   useEffect(() => { void api.listSkills().then(setSkills) }, [])
-  useEffect(() => { if (analysis) void api.listProposals(analysis.id).then(setProposals) }, [analysis?.id])
+
+  const refreshProposals = () => {
+    if (analysis) void api.listProposals(analysis.id).then(setProposals)
+  }
+  useEffect(() => { refreshProposals() }, [analysis?.id])  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!analysis) return null
   const names = new Map(skills.map(s => [s.id, s.name]))
@@ -28,8 +32,6 @@ export function InferPanel() {
       'skill' in item ? (names.get(item.skill as string) ?? item.skill)
         : 'gap' in item ? `等待${item.gap}ms`
           : `${item.op} ${item.key ?? ''}`).join(' → ')
-
-  const refreshProposals = () => { void api.listProposals(analysis.id).then(setProposals) }
 
   return (
     <div className="entry-panel">
