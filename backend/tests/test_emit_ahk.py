@@ -62,3 +62,9 @@ def test_deterministic_output():
     a = render_playbook_ahk(PB, {"rot_1": ROT}, SKILLS, BINDS)
     b = render_playbook_ahk(PB, {"rot_1": ROT}, SKILLS, BINDS)
     assert a == b
+
+
+def test_low_confidence_block_recorded_in_header_warnings():
+    out = render_playbook_ahk(PB, {"rot_1": ROT}, SKILLS, BINDS)
+    header = out.split("F12::ExitApp")[0]
+    assert "低置信块已注释化" in header

@@ -70,7 +70,7 @@ def _collect_skill_ids(body: list, skills_by_id: dict, acc: list[str]) -> None:
 
 
 def _block_ahk(block: dict, rotations_by_id: dict, skills_by_id: dict,
-               manual_loops: list[str], section_name: str) -> list[str]:
+               manual_loops: list[str], section_name: str, warnings: list[str]) -> list[str]:
     lines: list[str] = []
     if "skill" in block:
         sk = skills_by_id.get(block["skill"])
@@ -96,7 +96,19 @@ def _block_ahk(block: dict, rotations_by_id: dict, skills_by_id: dict,
         else:
             lines.append(f"{_rotation_fn(rid)}() ; {name}")
     if block.get("confidence", 1.0) < 0.7:
+        warnings.append(f"[{section_name}] 低置信块已注释化：{lines[0]}")
         lines = [f"; [低置信] {ln}" for ln in lines]
+    return lines
+
+
+def _rotation_body_lines(rotation: dict) -> list[str]:
+    """Extract body lines from rotation (skill calls + gaps)."""
+    lines: list[str] = []
+    for item in rotation["body"]:
+        if "skill" in item:
+            lines.append(f"{_skill_fn(item['skill'])}()")
+        elif "gap" in item:
+            lines.append(f"Sleep {item['gap']}")
     return lines
 
 
@@ -145,7 +157,7 @@ def render_playbook_ahk(playbook: dict, rotations_by_id: dict,
         body_lines: list[str] = []
         for block in sec.get("body", []):
             body_lines += _block_ahk(block, rotations_by_id, skills_by_id,
-                                     manual_loops, sec["name"])
+                                     manual_loops, sec["name"], warnings)
             if "rotation" in block and block["rotation"] not in rotation_ids:
                 rotation_ids.append(block["rotation"])
         _collect_skill_ids(sec.get("body", []), skills_by_id, all_skill_ids)
@@ -168,12 +180,7 @@ def render_playbook_ahk(playbook: dict, rotations_by_id: dict,
             warnings.append(f"未知循环 id {rid}")
             parts += _fn(_rotation_fn(rid), [f"; ⚠ 未知循环 id {rid}"])
             continue
-        body_lines: list[str] = []
-        for item in rot["body"]:
-            if "skill" in item:
-                body_lines.append(f"{_skill_fn(item['skill'])}()")
-            elif "gap" in item:
-                body_lines.append(f"Sleep {item['gap']}")
+        body_lines = _rotation_body_lines(rot)
         parts += _fn(_rotation_fn(rid), body_lines, rot["name"])
     parts += _skill_functions(all_skill_ids, skills_by_id, binds, warnings)
 
@@ -185,12 +192,7 @@ def render_rotation_ahk(rotation: dict, skills_by_id: dict, binds: dict) -> str:
     warnings: list[str] = []
     all_skill_ids: list[str] = []
     _collect_skill_ids(rotation["body"], skills_by_id, all_skill_ids)
-    body_lines: list[str] = []
-    for item in rotation["body"]:
-        if "skill" in item:
-            body_lines.append(f"{_skill_fn(item['skill'])}()")
-        elif "gap" in item:
-            body_lines.append(f"Sleep {item['gap']}")
+    body_lines = _rotation_body_lines(rotation)
     parts = ["F9:: {", f"    {_rotation_fn(rotation['id'])}()", "}", ""]
     parts += _fn(_rotation_fn(rotation["id"]), body_lines, rotation["name"])
     parts += _skill_functions(all_skill_ids, skills_by_id, binds, warnings)
