@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from './api/client'
-import type { Video } from './api/types'
+import type { Video, Aggregate } from './api/types'
 import { useHotkeys } from './hotkeys'
 import { Player } from './player/Player'
 import { TallyBar } from './tally/TallyBar'
@@ -12,6 +12,9 @@ import { EntryPanel } from './panel/EntryPanel'
 function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   const analysis = useSession(s => s.analysis)
   const setAnalysis = useSession(s => s.setAnalysis)
+  const [aggregate, setAggregate] = useState<Aggregate | null>(null)
+  const showAggregate = useSession(st => st.showAggregate)
+  const laneId = useSession(st => st.laneId)
   useHotkeys(video)
 
   useEffect(() => {
@@ -19,6 +22,11 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
       .then(list => (list.length ? api.getAnalysis(list[0].id) : api.createAnalysis(video.id)))
       .then(setAnalysis)
   }, [video.id, setAnalysis])
+
+  useEffect(() => {
+    if (!showAggregate || !laneId) { setAggregate(null); return }
+    api.laneAggregate(laneId).then(setAggregate)
+  }, [showAggregate, laneId])
 
   if (!analysis) return <p>加载中…</p>
   return (
@@ -28,7 +36,7 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
         <Player videoId={video.id} fps={video.fps ?? 30} durationMs={video.duration_ms ?? 0} />
         <TallyBar />
         <ThumbStrip video={video} />
-        <Timeline video={video} aggregate={null} />
+        <Timeline video={video} aggregate={aggregate} />
         {/* 后续任务在此依次挂载：A（任务 22）*/}
       </div>
       <EntryPanel />

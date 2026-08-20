@@ -36,8 +36,9 @@ export function useHotkeys(video: Video): void {
         st.toggleEntryMode()
       } else if (e.key === 't' || e.key === 'T') {
         void tallyAtPlayhead()
+      } else if (e.key === 'a' || e.key === 'A') {
+        st.toggleAggregate()
       }
-      // 后续任务在此追加：A（任务 22）
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
