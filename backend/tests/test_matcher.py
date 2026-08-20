@@ -1,4 +1,4 @@
-from vd.matcher import match_at, match_pass
+from vd.matcher import match_at, match_pass, match_all
 
 
 def tap(t, key):
@@ -26,6 +26,11 @@ DOUBLE_FB = {"id": "sk_dfb", "name": "强化火球", "pattern": [
     {"op": "gap", "ms": 200, "tol_ms": 80},
     {"op": "tap", "key": "2"}]}
 BLINK = {"id": "sk_blink", "name": "闪现", "pattern": [{"op": "chord", "keys": ["Shift", "2"]}]}
+FROSTBOLT = {"id": "sk_ice", "name": "冰锥", "pattern": [{"op": "tap", "key": "3"}]}
+COMBO = {"id": "sk_combo", "name": "冰火连携", "pattern": [
+    {"op": "skill", "ref": "sk_fb"},
+    {"op": "gap", "ms": 300, "tol_ms": 80},
+    {"op": "skill", "ref": "sk_ice"}]}
 
 
 def test_match_at_single_tap():
@@ -79,3 +84,20 @@ def test_chord_matches_regardless_of_key_order():
 
 def test_chord_not_matched_by_tap():
     assert match_at([tap(0, "Shift+2")], 0, BLINK["pattern"]) is None
+
+
+def test_match_all_recursive_to_fixpoint():
+    toks = [tap(0, "2"), tap(310, "3"), tap(1000, "9")]
+    r = match_all(toks, [FIREBALL, FROSTBOLT, COMBO])
+    kinds = [(t["kind"], t.get("skill_id")) for t in r["tokens"]]
+    assert kinds[0] == ("skill", "sk_combo")       # 第二趟把两个 L1 合成 L2
+    assert kinds[1] == ("tap", None)
+    assert len(r["unmatched"]) == 1
+    ids = [m["skill_id"] for m in r["matches"]]
+    assert ids.count("sk_fb") == 1 and ids.count("sk_ice") == 1 and ids.count("sk_combo") == 1
+
+
+def test_match_all_pure_only():
+    toks = [tap(0, "2")]
+    r = match_all(toks, [FIREBALL])
+    assert r["tokens"][0]["kind"] == "skill" and r["unmatched"] == []

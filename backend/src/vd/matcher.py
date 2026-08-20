@@ -86,3 +86,19 @@ def match_pass(tokens: list[dict], skills: list[dict]):
             out.append(tokens[i])
             i += 1
     return out, matches, ambiguities
+
+
+def match_all(ops: list[dict], skills: list[dict]) -> dict:
+    """自底向上多趟（spec §7.4）：纯操作 pattern 先，skill-ref pattern 循环至不动点。"""
+    pure = [s for s in skills if all(i["op"] != "skill" for i in s["pattern"])]
+    refs = [s for s in skills if any(i["op"] == "skill" for i in s["pattern"])]
+    tokens, matches, ambiguities = match_pass(list(ops), pure)
+    while refs:
+        tokens, m2, a2 = match_pass(tokens, refs)
+        matches += m2
+        ambiguities += a2
+        if not m2:
+            break
+    unmatched = [t for t in tokens if t["kind"] != "skill"]
+    return {"tokens": tokens, "matches": matches,
+            "ambiguities": ambiguities, "unmatched": unmatched}
