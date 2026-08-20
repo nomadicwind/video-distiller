@@ -11,12 +11,47 @@ def _ahk_key(k: str) -> str:
     return k
 
 
+def _one_line(x) -> str:
+    """防止名称/备注类字符串中的换行逃逸出 AHK 注释位置（Fix 4）。"""
+    return str(x).replace("\n", " ").replace("\r", " ")
+
+
+def _chord_send(parts: list[str]) -> str:
+    """首键包裹式 chord（如 Shift+2 → {Shift down}{2}{Shift up}）。"""
+    keys = [_ahk_key(p) for p in parts]
+    inner = "".join(f"{{{k}}}" for k in keys[1:])
+    return f'Send "{{{keys[0]} down}}{inner}{{{keys[0]} up}}"'
+
+
 def _skill_fn(skill_id: str) -> str:
     return f"Skill_{skill_id}"
 
 
 def _rotation_fn(rotation_id: str) -> str:
     return f"Rotation_{rotation_id}"
+
+
+def _op_lines(item: dict, warnings: list[str]) -> list[str]:
+    """单个 op 项 → AHK 行。技能 pattern 分支与循环体原始 op 项共用（Fix 2）。"""
+    op = item["op"]
+    if op == "tap":
+        return [f'Send "{{{_ahk_key(item["key"])}}}"']
+    if op == "gap":
+        return [f'Sleep {item["ms"]}']
+    if op == "hold":
+        key = _ahk_key(item.get("key") or item.get("button"))
+        return [f'Send "{{{key} down}}"', f'Sleep {item.get("ms", 100)}', f'Send "{{{key} up}}"']
+    if op == "chord":
+        keys = item.get("keys")
+        if keys is None:
+            keys = (item.get("key") or "").split("+")
+        return [_chord_send(keys)]
+    if op == "wheel":
+        return ['Send "{WheelDown}"']
+    if op == "skill":
+        return [f"{_skill_fn(item['ref'])}()"]
+    warnings.append(f"未知操作 {item!r}")
+    return ["; ⚠ 未知操作"]
 
 
 def skill_lines(skill: dict, binds: dict, skills_by_id: dict) -> tuple[list[str], list[str]]:
@@ -26,31 +61,18 @@ def skill_lines(skill: dict, binds: dict, skills_by_id: dict) -> tuple[list[str]
     warnings: list[str] = []
     if pattern:
         for item in pattern:
-            op = item["op"]
-            if op == "tap":
-                lines.append(f'Send "{{{_ahk_key(item["key"])}}}"')
-            elif op == "gap":
-                lines.append(f'Sleep {item["ms"]}')
-            elif op == "hold":
-                key = _ahk_key(item.get("key") or item.get("button"))
-                lines.append(f'Send "{{{key} down}}"')
-                lines.append(f'Sleep {item.get("ms", 100)}')
-                lines.append(f'Send "{{{key} up}}"')
-            elif op == "chord":
-                keys = [_ahk_key(k) for k in item["keys"]]
-                inner = "".join(f"{{{k}}}" for k in keys[1:])
-                lines.append(f'Send "{{{keys[0]} down}}{inner}{{{keys[0]} up}}"')
-            elif op == "wheel":
-                lines.append('Send "{WheelDown}"')
-            elif op == "skill":
-                lines.append(f"{_skill_fn(item['ref'])}()")
+            lines.extend(_op_lines(item, warnings))
         return lines, warnings
     keys = binds.get(skill["id"]) or []
     if keys:
-        lines.append(f'Send "{{{_ahk_key(keys[0])}}}"')
+        parts = keys[0].split("+")
+        if len(parts) > 1:
+            lines.append(_chord_send(parts))
+        else:
+            lines.append(f'Send "{{{_ahk_key(parts[0])}}}"')
         return lines, warnings
-    warnings.append(f"技能 {skill['name']} 无 pattern 也无键位绑定")
-    lines.append(f"; ⚠ 技能 {skill['name']} 无 pattern 也无键位绑定")
+    warnings.append(f"技能 {_one_line(skill['name'])} 无 pattern 也无键位绑定")
+    lines.append(f"; ⚠ 技能 {_one_line(skill['name'])} 无 pattern 也无键位绑定")
     return lines, warnings
 
 
@@ -75,18 +97,19 @@ def _block_ahk(block: dict, rotations_by_id: dict, skills_by_id: dict,
     if "skill" in block:
         sk = skills_by_id.get(block["skill"])
         name = sk["name"] if sk else block["skill"]
-        lines.append(f"{_skill_fn(block['skill'])}() ; {name}")
+        lines.append(f"{_skill_fn(block['skill'])}() ; {_one_line(name)}")
     elif "gap" in block:
         lines.append(f"Sleep {block['gap']}")
     elif "note" in block:
-        lines.append(f"; {block['note']}")
+        lines.append(f"; {_one_line(block['note'])}")
     else:
         rid = block["rotation"]
         rot = rotations_by_id.get(rid)
         name = rot["name"] if rot else rid
         if block.get("repeat_note"):
-            manual_loops.append(f"[{section_name}] {name}：{block['repeat_note']}")
-            lines.append(f"Loop {{ ; 循环条件（人工判断）：{block['repeat_note']}")
+            manual_loops.append(
+                f"[{_one_line(section_name)}] {_one_line(name)}：{_one_line(block['repeat_note'])}")
+            lines.append(f"Loop {{ ; 循环条件（人工判断）：{_one_line(block['repeat_note'])}")
             lines.append(f"    {_rotation_fn(rid)}()")
             lines.append("}")
         elif block.get("iterations"):
@@ -94,26 +117,31 @@ def _block_ahk(block: dict, rotations_by_id: dict, skills_by_id: dict,
             lines.append(f"    {_rotation_fn(rid)}()")
             lines.append("}")
         else:
-            lines.append(f"{_rotation_fn(rid)}() ; {name}")
+            lines.append(f"{_rotation_fn(rid)}() ; {_one_line(name)}")
     if block.get("confidence", 1.0) < 0.7:
-        warnings.append(f"[{section_name}] 低置信块已注释化：{lines[0]}")
+        warnings.append(f"[{_one_line(section_name)}] 低置信块已注释化：{_one_line(lines[0])}")
         lines = [f"; [低置信] {ln}" for ln in lines]
     return lines
 
 
-def _rotation_body_lines(rotation: dict) -> list[str]:
-    """Extract body lines from rotation (skill calls + gaps)."""
+def _rotation_body_lines(rotation: dict, warnings: list[str]) -> list[str]:
+    """Extract body lines from rotation (skill calls, gaps, raw op items — Fix 2)."""
     lines: list[str] = []
     for item in rotation["body"]:
         if "skill" in item:
             lines.append(f"{_skill_fn(item['skill'])}()")
         elif "gap" in item:
             lines.append(f"Sleep {item['gap']}")
+        elif "op" in item:
+            lines.extend(_op_lines(item, warnings))
+        else:
+            warnings.append(f"循环体未知项 {item!r}")
+            lines.append("; ⚠ 未知操作")
     return lines
 
 
 def _fn(name: str, body_lines: list[str], comment: str = "") -> list[str]:
-    head = f"{name}() {{" + (f" ; {comment}" if comment else "")
+    head = f"{name}() {{" + (f" ; {_one_line(comment)}" if comment else "")
     return [head] + [f"    {ln}" for ln in body_lines] + ["}", ""]
 
 
@@ -133,13 +161,13 @@ def _skill_functions(skill_ids: list[str], skills_by_id: dict, binds: dict,
 
 
 def _header(title: str, manual_loops: list[str], warnings: list[str]) -> list[str]:
-    lines = ["#Requires AutoHotkey v2.0", f"; Video Distiller 导出 · {title}"]
+    lines = ["#Requires AutoHotkey v2.0", f"; Video Distiller 导出 · {_one_line(title)}"]
     if manual_loops:
         lines.append("; ⚠ 人工判断的循环条件（不可执行，运行中按 F12 急停）：")
-        lines += [f";   - {m}" for m in manual_loops]
+        lines += [f";   - {_one_line(m)}" for m in manual_loops]
     if warnings:
         lines.append("; ⚠ 警告：")
-        lines += [f";   - {w}" for w in warnings]
+        lines += [f";   - {_one_line(w)}" for w in warnings]
     lines += ["", "F12::ExitApp", ""]
     return lines
 
@@ -180,7 +208,7 @@ def render_playbook_ahk(playbook: dict, rotations_by_id: dict,
             warnings.append(f"未知循环 id {rid}")
             parts += _fn(_rotation_fn(rid), [f"; ⚠ 未知循环 id {rid}"])
             continue
-        body_lines = _rotation_body_lines(rot)
+        body_lines = _rotation_body_lines(rot, warnings)
         parts += _fn(_rotation_fn(rid), body_lines, rot["name"])
     parts += _skill_functions(all_skill_ids, skills_by_id, binds, warnings)
 
@@ -192,7 +220,7 @@ def render_rotation_ahk(rotation: dict, skills_by_id: dict, binds: dict) -> str:
     warnings: list[str] = []
     all_skill_ids: list[str] = []
     _collect_skill_ids(rotation["body"], skills_by_id, all_skill_ids)
-    body_lines = _rotation_body_lines(rotation)
+    body_lines = _rotation_body_lines(rotation, warnings)
     parts = ["F9:: {", f"    {_rotation_fn(rotation['id'])}()", "}", ""]
     parts += _fn(_rotation_fn(rotation["id"]), body_lines, rotation["name"])
     parts += _skill_functions(all_skill_ids, skills_by_id, binds, warnings)

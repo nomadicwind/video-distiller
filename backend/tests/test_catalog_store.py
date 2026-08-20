@@ -138,6 +138,13 @@ def test_validate_sections_rejects_bad_blocks(conn):
         store.create_playbook(conn, name="坏4", sections=[{"body": []}])       # 段落缺 name
 
 
+def test_validate_sections_rejects_non_dict_block_and_non_list_body():
+    with pytest.raises(ValueError):
+        store.validate_sections([{"name": "s", "body": ["rotation"]}])  # body 项非 dict
+    with pytest.raises(ValueError):
+        store.validate_sections([{"name": "s", "body": "rotation"}])    # body 本身非 list
+
+
 def test_get_rotation(conn):
     r = store.create_rotation(conn, name="r", body=[])
     assert store.get_rotation(conn, r["id"])["name"] == "r"

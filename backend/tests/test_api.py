@@ -410,3 +410,10 @@ def test_accept_playbook_malformed_payload_500_keeps_pending(client, analysis):
 def test_playbook_versions_nonexistent_404(client):
     r = client.get("/api/playbooks/nope/versions")
     assert r.status_code == 404
+
+
+def test_put_playbook_rejects_non_dict_block_400(client, analysis):
+    _, pb = _make_playbook(client, analysis)
+    r = client.put(f"/api/playbooks/{pb['id']}",
+                   json={"sections": [{"name": "x", "body": ["rotation"]}]})
+    assert r.status_code == 400

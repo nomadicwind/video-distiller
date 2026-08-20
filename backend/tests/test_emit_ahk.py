@@ -68,3 +68,54 @@ def test_low_confidence_block_recorded_in_header_warnings():
     out = render_playbook_ahk(PB, {"rot_1": ROT}, SKILLS, BINDS)
     header = out.split("F12::ExitApp")[0]
     assert "低置信块已注释化" in header
+
+
+def test_chord_bind_emits_valid_ahk_chord():
+    """Fix 1: bind 值为 "Shift+2" 的裸键位技能需拆成 AHK chord，而非非法的 {Shift+2}。"""
+    skills = dict(SKILLS)
+    skills["sk_chord_bound"] = {"id": "sk_chord_bound", "name": "组合键位技能", "pattern": []}
+    binds = dict(BINDS)
+    binds["sk_chord_bound"] = ["Shift+2"]
+    rot = {"id": "rot_chord", "name": "组合键循环",
+           "body": [{"skill": "sk_chord_bound"}]}
+    pb = {"id": "pb_chord", "name": "组合键方案", "version": 1,
+          "keymap_id": "km-default", "keymap_version": 1, "derived_from": [],
+          "sections": [{"name": "唯一段", "body": [{"rotation": "rot_chord"}]}]}
+    out = render_playbook_ahk(pb, {"rot_chord": rot}, skills, binds)
+    assert 'Send "{Shift down}{2}{Shift up}"' in out
+    assert "{Shift+2}" not in out
+
+
+def test_raw_op_rotation_body_emits_send_lines():
+    """Fix 2: 循环体中的原始操作项（discover.build_candidate 产物）应被编译为真实 Send 行。"""
+    rot = {"id": "rot_raw", "name": "原始操作循环",
+           "body": [{"op": "tap", "key": "R"}, {"gap": 150}]}
+    pb = {"id": "pb_raw", "name": "原始操作方案", "version": 1,
+          "keymap_id": "km-default", "keymap_version": 1, "derived_from": [],
+          "sections": [{"name": "唯一段", "body": [{"rotation": "rot_raw"}]}]}
+    out = render_playbook_ahk(pb, {"rot_raw": rot}, SKILLS, {})
+    assert 'Send "{r}"' in out
+    assert "Sleep 150" in out
+
+
+def test_unknown_raw_op_emits_comment_and_header_warning():
+    """Fix 2: 未知 op 种类要注释化且记录到头部警告，不能静默丢弃。"""
+    rot = {"id": "rot_bad_op", "name": "未知操作循环",
+           "body": [{"op": "teleport", "key": "X"}]}
+    pb = {"id": "pb_bad_op", "name": "未知操作方案", "version": 1,
+          "keymap_id": "km-default", "keymap_version": 1, "derived_from": [],
+          "sections": [{"name": "唯一段", "body": [{"rotation": "rot_bad_op"}]}]}
+    out = render_playbook_ahk(pb, {"rot_bad_op": rot}, SKILLS, {})
+    assert "; ⚠ 未知操作" in out
+    header = out.split("F12::ExitApp")[0]
+    assert "⚠ 警告" in header
+    assert "teleport" in header
+
+
+def test_newline_injection_in_playbook_name_is_neutralized():
+    """Fix 4: 方案名中嵌入换行 + 伪造 Send 指令，不得逃逸注释生成可执行行。"""
+    evil = dict(PB)
+    evil["name"] = "邪恶方案\nSend {F4}"
+    out = render_playbook_ahk(evil, {"rot_1": ROT}, SKILLS, BINDS)
+    for line in out.splitlines():
+        assert not line.strip().startswith("Send {F4}")

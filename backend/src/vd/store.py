@@ -376,7 +376,12 @@ def validate_sections(sections: list) -> None:
     for sec in sections:
         if not isinstance(sec, dict) or not sec.get("name"):
             raise ValueError("每个段落必须有 name")
-        for block in sec.get("body", []):
+        body = sec.get("body", [])
+        if not isinstance(body, list):
+            raise ValueError("body 必须是列表")
+        for block in body:
+            if not isinstance(block, dict):
+                raise ValueError(f"块必须是对象: {block!r}")
             keys = [k for k in VALID_BLOCK_KEYS if k in block]
             if len(keys) != 1:
                 raise ValueError(f"块必须恰含一个主键 {VALID_BLOCK_KEYS}: {block!r}")
