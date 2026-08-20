@@ -32,3 +32,11 @@ def client(data_dir):
 
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture
+def analysis(client, sample_video):
+    with sample_video.open("rb") as f:
+        vid = client.post("/api/videos/upload",
+                          files={"file": ("s.mp4", f, "video/mp4")}).json()["id"]
+    return client.post("/api/analyses", json={"video_id": vid}).json()

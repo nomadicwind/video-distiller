@@ -72,14 +72,6 @@ def test_pull_endpoint_full_flow(client, sample_video, monkeypatch):
     assert v["source_kind"] == "bilibili"
 
 
-@pytest.fixture
-def analysis(client, sample_video):
-    with sample_video.open("rb") as f:
-        vid = client.post("/api/videos/upload",
-                          files={"file": ("s.mp4", f, "video/mp4")}).json()["id"]
-    return client.post("/api/analyses", json={"video_id": vid}).json()
-
-
 def test_analysis_create_and_fetch(client, analysis):
     assert analysis["name"].endswith("_a1")
     tree = client.get(f"/api/analyses/{analysis['id']}").json()
