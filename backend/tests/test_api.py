@@ -185,3 +185,16 @@ def test_proposal_accept_creates_rotation(client, analysis):
     assert r["rotation"]["name"] == "单体循环"
     assert client.get("/api/rotations").json()[0]["derived_from"] == [analysis["id"]]
     assert len(client.get(f"/api/analyses/{analysis['id']}/proposals").json()) == 1
+
+
+def test_proposal_accept_is_idempotent(client, analysis):
+    from vd import db, store
+    conn = db.connect()
+    p = store.create_proposal(conn, analysis_id=analysis["id"], kind="rotation",
+                              payload={"name": "x", "body": []}, report={})
+    conn.close()
+    assert client.post(f"/api/proposals/{p['id']}/accept").status_code == 200
+    assert client.post(f"/api/proposals/{p['id']}/accept").status_code == 409
+    assert len(client.get("/api/rotations").json()) == 1
+    assert client.post(f"/api/proposals/{p['id']}/reject").status_code == 409
+    assert client.post("/api/proposals/nope/accept").status_code == 404

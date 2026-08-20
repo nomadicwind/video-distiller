@@ -326,9 +326,12 @@ def proposals(analysis_id: str, conn=Depends(get_conn)):
 
 @app.post("/api/proposals/{proposal_id}/accept")
 def accept_proposal(proposal_id: str, conn=Depends(get_conn)):
-    p = store.set_proposal_status(conn, proposal_id, "accepted")
-    if p is None:
+    row = conn.execute("SELECT status FROM proposals WHERE id=?", (proposal_id,)).fetchone()
+    if row is None:
         raise HTTPException(404)
+    if row["status"] != "pending":
+        raise HTTPException(409, "proposal 已裁决")
+    p = store.set_proposal_status(conn, proposal_id, "accepted")
     rotation = store.create_rotation(
         conn, name=p["payload"]["name"], body=p["payload"]["body"],
         params=p["payload"].get("params"), note=p["payload"].get("note"),
@@ -338,9 +341,12 @@ def accept_proposal(proposal_id: str, conn=Depends(get_conn)):
 
 @app.post("/api/proposals/{proposal_id}/reject")
 def reject_proposal(proposal_id: str, conn=Depends(get_conn)):
-    p = store.set_proposal_status(conn, proposal_id, "rejected")
-    if p is None:
+    row = conn.execute("SELECT status FROM proposals WHERE id=?", (proposal_id,)).fetchone()
+    if row is None:
         raise HTTPException(404)
+    if row["status"] != "pending":
+        raise HTTPException(409, "proposal 已裁决")
+    p = store.set_proposal_status(conn, proposal_id, "rejected")
     return p
 
 
