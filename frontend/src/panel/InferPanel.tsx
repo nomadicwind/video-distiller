@@ -28,7 +28,7 @@ export function InferPanel() {
   const names = new Map(skills.map(s => [s.id, s.name]))
 
   const bodyText = (p: Proposal) =>
-    p.payload.body.map(item =>
+    (p.payload.body ?? []).map(item =>
       'skill' in item ? (names.get(item.skill as string) ?? item.skill)
         : 'gap' in item ? `等待${item.gap}ms`
           : `${item.op} ${item.key ?? ''}`).join(' → ')
