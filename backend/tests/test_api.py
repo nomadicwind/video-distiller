@@ -146,3 +146,42 @@ def test_lane_aggregate_endpoint(client, analysis):
     r = client.get(f"/api/lanes/{lane['id']}/aggregate").json()
     assert r["n_takes"] == 2
     assert r["aggregated"][0]["t_ms"] == 110
+
+
+def test_skill_routes(client):
+    s = client.post("/api/skills", json={
+        "name": "火球术", "class_": "法师", "cd_ms": 6000,
+        "pattern": [{"op": "tap", "key": "2"}]}).json()
+    assert s["name"] == "火球术"
+    assert client.post("/api/skills", json={
+        "name": "坏", "pattern": [{"op": "nope"}]}).status_code == 400
+    s2 = client.patch(f"/api/skills/{s['id']}", json={"anim_ms": 720}).json()
+    assert s2["anim_ms"] == 720
+    assert len(client.get("/api/skills").json()) == 1
+    client.delete(f"/api/skills/{s['id']}")
+    assert client.get("/api/skills").json() == []
+
+
+def test_keymap_routes_and_binding(client, analysis):
+    k = client.post("/api/keymaps", json={
+        "keymap_id": "km_mage", "class_": "法师",
+        "binds": {"sk_x": ["2"]}}).json()
+    assert k["version"] == 1
+    a = client.patch(f"/api/analyses/{analysis['id']}/keymap",
+                     json={"keymap_id": "km_mage", "version": 1}).json()
+    assert a["keymap_version"] == 1
+
+
+def test_proposal_accept_creates_rotation(client, analysis):
+    from vd import db, store
+    conn = db.connect()
+    p = store.create_proposal(conn, analysis_id=analysis["id"], kind="rotation",
+                              payload={"name": "单体循环", "note": "n",
+                                       "body": [{"skill": "sk_a"}, {"gap": 180}]},
+                              report={"coverage": 0.88})
+    conn.close()
+    r = client.post(f"/api/proposals/{p['id']}/accept").json()
+    assert r["proposal"]["status"] == "accepted"
+    assert r["rotation"]["name"] == "单体循环"
+    assert client.get("/api/rotations").json()[0]["derived_from"] == [analysis["id"]]
+    assert len(client.get(f"/api/analyses/{analysis['id']}/proposals").json()) == 1

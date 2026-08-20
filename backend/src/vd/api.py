@@ -230,3 +230,120 @@ def lane_aggregate(lane_id: str, window_ms: int = 300, conn=Depends(get_conn)):
             "SELECT * FROM marks WHERE take_id=? ORDER BY t_ms", (t["id"],))]
         takes.append(marks)
     return agg.aggregate_lane(takes, window_ms=window_ms)
+
+
+class SkillReq(BaseModel):
+    name: str
+    class_: str | None = None
+    cd_ms: int | None = None
+    cast_ms: int | None = None
+    anim_ms: int | None = None
+    cancelable: bool = False
+    pattern: list = []
+
+
+@app.get("/api/skills")
+def skills(conn=Depends(get_conn)):
+    return store.list_skills(conn)
+
+
+@app.post("/api/skills")
+def create_skill(req: SkillReq, conn=Depends(get_conn)):
+    try:
+        return store.create_skill(conn, name=req.name, class_=req.class_,
+                                  cd_ms=req.cd_ms, cast_ms=req.cast_ms,
+                                  anim_ms=req.anim_ms, cancelable=req.cancelable,
+                                  pattern=req.pattern)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class SkillPatch(BaseModel):
+    name: str | None = None
+    class_: str | None = None
+    cd_ms: int | None = None
+    cast_ms: int | None = None
+    anim_ms: int | None = None
+    cancelable: bool | None = None
+    pattern: list | None = None
+
+
+@app.patch("/api/skills/{skill_id}")
+def patch_skill(skill_id: str, req: SkillPatch, conn=Depends(get_conn)):
+    fields = {("class" if k == "class_" else k): v
+              for k, v in req.model_dump().items() if v is not None}
+    if not fields:
+        raise HTTPException(400, "empty patch")
+    try:
+        result = store.update_skill(conn, skill_id, **fields)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if result is None:
+        raise HTTPException(404)
+    return result
+
+
+@app.delete("/api/skills/{skill_id}")
+def delete_skill(skill_id: str, conn=Depends(get_conn)):
+    store.delete_skill(conn, skill_id)
+    return {"ok": True}
+
+
+class KeymapReq(BaseModel):
+    keymap_id: str
+    class_: str | None = None
+    binds: dict
+
+
+@app.get("/api/keymaps")
+def keymaps(conn=Depends(get_conn)):
+    return store.list_keymaps(conn)
+
+
+@app.post("/api/keymaps")
+def save_keymap(req: KeymapReq, conn=Depends(get_conn)):
+    return store.save_keymap(conn, keymap_id=req.keymap_id, class_=req.class_,
+                             binds=req.binds)
+
+
+class KeymapBindReq(BaseModel):
+    keymap_id: str
+    version: int
+
+
+@app.patch("/api/analyses/{analysis_id}/keymap")
+def bind_keymap(analysis_id: str, req: KeymapBindReq, conn=Depends(get_conn)):
+    a = store.bind_analysis_keymap(conn, analysis_id, req.keymap_id, req.version)
+    if a is None:
+        raise HTTPException(404)
+    return a
+
+
+@app.get("/api/analyses/{analysis_id}/proposals")
+def proposals(analysis_id: str, conn=Depends(get_conn)):
+    return store.list_proposals(conn, analysis_id)
+
+
+@app.post("/api/proposals/{proposal_id}/accept")
+def accept_proposal(proposal_id: str, conn=Depends(get_conn)):
+    p = store.set_proposal_status(conn, proposal_id, "accepted")
+    if p is None:
+        raise HTTPException(404)
+    rotation = store.create_rotation(
+        conn, name=p["payload"]["name"], body=p["payload"]["body"],
+        params=p["payload"].get("params"), note=p["payload"].get("note"),
+        derived_from=[p["analysis_id"]])
+    return {"proposal": p, "rotation": rotation}
+
+
+@app.post("/api/proposals/{proposal_id}/reject")
+def reject_proposal(proposal_id: str, conn=Depends(get_conn)):
+    p = store.set_proposal_status(conn, proposal_id, "rejected")
+    if p is None:
+        raise HTTPException(404)
+    return p
+
+
+@app.get("/api/rotations")
+def rotations(conn=Depends(get_conn)):
+    return store.list_rotations(conn)
