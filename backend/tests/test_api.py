@@ -25,6 +25,17 @@ def test_sprite_served_as_jpeg(client, sample_video):
     assert r.headers["content-type"] == "image/jpeg"
 
 
+def test_sprite_unknown_video_404(client):
+    assert client.get("/api/videos/nope/sprite").status_code == 404
+
+
+def test_video_file_range_beyond_size_416(client, sample_video):
+    vid = _ready_video(client, sample_video)
+    r = client.get(f"/api/videos/{vid}/file", headers={"Range": "bytes=99999999-"})
+    assert r.status_code == 416
+    assert r.headers["content-range"].startswith("bytes */")
+
+
 def test_upload_runs_full_ingest_pipeline(client, sample_video):
     with sample_video.open("rb") as f:
         r = client.post("/api/videos/upload",

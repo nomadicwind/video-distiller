@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Iterator
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from vd import aggregate as agg, db, ingest, store
@@ -52,6 +52,8 @@ def video_file(video_id: str, request: Request, conn=Depends(get_conn)):
         )
     start = int(m.group(1) or 0)
     end = min(int(m.group(2) or size - 1), size - 1)
+    if start >= size or start > end:
+        return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
     return StreamingResponse(
         _read_range(path, start, end), status_code=206, media_type="video/mp4",
         headers={
@@ -64,6 +66,9 @@ def video_file(video_id: str, request: Request, conn=Depends(get_conn)):
 
 @app.get("/api/videos/{video_id}/sprite")
 def sprite(video_id: str, conn=Depends(get_conn)):
+    v = store.get_video(conn, video_id)
+    if v is None:
+        raise HTTPException(404)
     p = data_root() / "thumbs" / f"{video_id}.jpg"
     if not p.exists():
         raise HTTPException(404)
