@@ -463,6 +463,71 @@ def test_exec_lifecycle_and_backfeed(client, analysis, monkeypatch):
     assert all(m["provenance"] == "execution_log" for m in take["marks"])
 
 
+def test_exec_start_paused_then_step(client, analysis, monkeypatch):
+    """paused:true 时会话应保持 idle（不自动 start），随后 step 从 idle 直接
+    可用（executor.step() 的既有契约），推进 cursor 到 1（M4 review Fix 3）。"""
+    from vd import api as api_module
+    from vd.host import MockHost
+    api_module._exec_session = None      # 隔离：模块级会话跨测试共享，先清空
+    monkeypatch.setattr(api_module, "_exec_host", MockHost())
+    _, pb = _make_playbook(client, analysis)
+
+    r = client.post("/api/exec/start",
+                    json={"kind": "playbook", "id": pb["id"], "paused": True})
+    assert r.status_code == 200
+    assert r.json()["state"] == "idle"
+
+    r = client.post("/api/exec/step")
+    assert r.status_code == 200
+    assert r.json()["cursor"] == 1
+    client.post("/api/exec/stop")        # 不留 paused 会话给后续测试
+    api_module._exec_session = None
+
+
+def test_exec_start_default_not_paused_runs(client, analysis, monkeypatch):
+    """默认（未传 paused）行为不变：start 后会话立即进入 running/paused/done。"""
+    from vd import api as api_module
+    from vd.host import MockHost
+    api_module._exec_session = None
+    monkeypatch.setattr(api_module, "_exec_host", MockHost())
+    _, pb = _make_playbook(client, analysis)
+
+    r = client.post("/api/exec/start", json={"kind": "playbook", "id": pb["id"]})
+    assert r.status_code == 200
+    assert r.json()["state"] != "idle"
+    client.post("/api/exec/stop")
+    api_module._exec_session = None
+
+
+def test_exec_status_surfaces_warnings_and_manual_loops(client, analysis, monkeypatch):
+    from vd import api as api_module
+    from vd.host import MockHost
+    api_module._exec_session = None
+    h = MockHost()
+    monkeypatch.setattr(api_module, "_exec_host", h)
+    _, pb = _make_playbook(client, analysis)
+    monkeypatch.setattr(
+        api_module.emit_plan, "render_playbook_plan",
+        lambda *a, **k: json.dumps({
+            "format": "vd-plan", "version": 1, "title": "t", "stop_hotkey": "F12",
+            "events": [{"t_ms": 0, "action": "tap", "key": "q"}],
+            "manual_loops": ["[段1] 循环：直到 boss 死亡"],
+            "warnings": ["未知技能 id sk_ghost"]}))
+
+    r = client.post("/api/exec/start",
+                    json={"kind": "playbook", "id": pb["id"], "paused": True})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["warnings"] == ["未知技能 id sk_ghost"]
+    assert body["manual_loops"] == ["[段1] 循环：直到 boss 死亡"]
+
+    r2 = client.get("/api/exec/status")
+    assert r2.json()["warnings"] == ["未知技能 id sk_ghost"]
+    assert r2.json()["manual_loops"] == ["[段1] 循环：直到 boss 死亡"]
+    client.post("/api/exec/stop")
+    api_module._exec_session = None
+
+
 def test_exec_start_conflict_and_stop(client, analysis, monkeypatch):
     from vd import api as api_module
     from vd.host import MockHost

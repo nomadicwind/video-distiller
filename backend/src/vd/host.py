@@ -43,6 +43,21 @@ class MockHost:
 
 _CAPTURE_COMMON = ["-y", "-pix_fmt", "yuv420p"]
 
+# IR 键名 → AHK 键名（与 emit/ahk.py 的 _KEY_MAP 保持一致）。仅用于
+# WindowsHost 向 worker 子进程发送协议行；plan JSON / ExecutionSession
+# 的 log 与回灌都停留在 IR 键空间，不做这一层翻译（controller ruling）。
+_AHK_KEYS = {"LMB": "LButton", "RMB": "RButton", "Wheel": "WheelDown"}
+
+
+def _to_ahk_key(k: str) -> str:
+    """镜像 emit/ahk.py 的 _ahk_key 语义：映射表命中优先；单字母字母键
+    小写；其余原样透传。"""
+    if k in _AHK_KEYS:
+        return _AHK_KEYS[k]
+    if len(k) == 1 and k.isalpha():
+        return k.lower()
+    return k
+
 
 class MacHost:
     """采集走 ffmpeg avfoundation；注入不实现（spec §4.3）。"""
@@ -77,10 +92,19 @@ class MacHost:
     def stop_capture(self) -> str:
         if self._proc is None or self._out is None:
             raise HostError("device_unavailable", "没有进行中的采集")
-        self._proc.stdin.write(b"q")     # ffmpeg 优雅收尾
-        self._proc.stdin.flush()
-        self._proc.wait(timeout=30)
-        out, self._proc, self._out = self._out, None, None
+        out = self._out
+        try:
+            self._proc.stdin.write(b"q")     # ffmpeg 优雅收尾
+            self._proc.stdin.flush()
+            self._proc.wait(timeout=30)
+        except (BrokenPipeError, OSError, subprocess.TimeoutExpired):
+            raise HostError(
+                "permission_denied",
+                "ffmpeg 采集进程异常退出；请检查系统设置→隐私与安全性→"
+                "屏幕录制权限是否已授予终端/本应用")
+        finally:
+            self._proc = None
+            self._out = None
         return out
 
 
@@ -137,7 +161,7 @@ class WindowsHost:
     def _event_line(event: dict) -> str:
         action = event.get("action")
         if action in ("down", "up", "tap"):
-            return f"{action} {event['key']}\n"
+            return f"{action} {_to_ahk_key(event['key'])}\n"
         if action == "wheel":
             return "wheel\n"
         raise HostError("injection_rejected", f"未知事件 action：{action!r}")
@@ -194,10 +218,19 @@ class WindowsHost:
     def stop_capture(self) -> str:
         if self._proc is None or self._out is None:
             raise HostError("device_unavailable", "没有进行中的采集")
-        self._proc.stdin.write(b"q")
-        self._proc.stdin.flush()
-        self._proc.wait(timeout=30)
-        out, self._proc, self._out = self._out, None, None
+        out = self._out
+        try:
+            self._proc.stdin.write(b"q")
+            self._proc.stdin.flush()
+            self._proc.wait(timeout=30)
+        except (BrokenPipeError, OSError, subprocess.TimeoutExpired):
+            raise HostError(
+                "device_unavailable",
+                "ffmpeg 采集进程异常退出；请检查 ffmpeg ddagrab 支持"
+                "（需要较新版本 ffmpeg 且系统支持 Desktop Duplication API）")
+        finally:
+            self._proc = None
+            self._out = None
         return out
 
 
@@ -209,4 +242,7 @@ def get_host():
         return MacHost()
     if kind == "windows" or (not kind and sys.platform == "win32"):
         return WindowsHost()
+    if kind:
+        raise HostError("device_unavailable",
+                        f"未知 VD_HOST 值：{kind}（可用 mock|mac|windows）")
     return MockHost()

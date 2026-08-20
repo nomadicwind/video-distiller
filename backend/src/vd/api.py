@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Iterator, Literal
@@ -18,6 +19,10 @@ app = FastAPI(title="Video Distiller")
 
 _exec_host = vd_host.get_host()
 _exec_session: vd_executor.ExecutionSession | None = None
+# 会话级读写锁：exec_start 的“检查 409 冲突 + 换上新会话”必须原子化，
+# 否则并发 start 请求可能都通过冲突检查后各建一个会话，后写者覆盖前者
+# （M4 review Fix 5）。
+_exec_lock = threading.Lock()
 
 
 def get_conn():
@@ -629,6 +634,7 @@ class ExecStartReq(BaseModel):
     kind: str
     id: str
     speed: float = 1.0
+    paused: bool = False
 
 
 @app.post("/api/exec/start")
@@ -654,12 +660,20 @@ def exec_start(req: ExecStartReq, conn=Depends(get_conn)):
             raise HTTPException(404, "rotation not found")
         text = emit_plan.render_rotation_plan(rot, skills_by_id, {})
     plan_doc = json.loads(text)
-    _exec_session = vd_executor.ExecutionSession(plan_doc, _exec_host, speed=req.speed)
-    try:
-        _exec_session.start()
-    except vd_host.HostError as e:
-        raise HTTPException(500, {"code": e.code, "hint": e.hint})
-    return _exec_session.status()
+    # 409 冲突检查 + 换上新会话必须原子化（M4 review Fix 5）：上面那次检查只
+    # 是为了让常见情况快速失败、避免白构建 plan；这里在持锁期间重新检查一
+    # 遍才是真正防并发的关卡。
+    with _exec_lock:
+        if _exec_session is not None and _exec_session.state in ("running", "paused"):
+            raise HTTPException(409, "已有执行在进行")
+        session = vd_executor.ExecutionSession(plan_doc, _exec_host, speed=req.speed)
+        _exec_session = session
+    if not req.paused:
+        try:
+            session.start()
+        except vd_host.HostError as e:
+            raise HTTPException(500, {"code": e.code, "hint": e.hint})
+    return session.status()
 
 
 class BackfeedReq(BaseModel):
@@ -668,7 +682,8 @@ class BackfeedReq(BaseModel):
 
 @app.post("/api/exec/backfeed")
 def exec_backfeed(req: BackfeedReq, conn=Depends(get_conn)):
-    if _exec_session is None or _exec_session.state not in ("stopped", "done"):
+    s = _exec_session
+    if s is None or s.state not in ("stopped", "done"):
         raise HTTPException(409, "执行未结束，不能回灌")
     tree = store.get_analysis_tree(conn, req.analysis_id)
     if tree is None:
@@ -678,7 +693,7 @@ def exec_backfeed(req: BackfeedReq, conn=Depends(get_conn)):
         raise HTTPException(404, "L0 泳道不存在")
     take = store.create_take(conn, l0["id"])
     marks = []
-    log = list(_exec_session.log)
+    log = list(s.log)
     used: set[int] = set()
     for i, ev in enumerate(log):
         if i in used:
@@ -717,22 +732,24 @@ def exec_backfeed(req: BackfeedReq, conn=Depends(get_conn)):
 def exec_cmd(cmd: str):
     if cmd not in ("pause", "resume", "stop", "step"):
         raise HTTPException(400, "未知命令")
-    if _exec_session is None:
+    s = _exec_session
+    if s is None:
         raise HTTPException(404, "没有执行会话")
     try:
-        getattr(_exec_session, cmd)()
+        getattr(s, cmd)()
     except ValueError as e:
         raise HTTPException(409, str(e))
     except vd_host.HostError as e:
         raise HTTPException(500, {"code": e.code, "hint": e.hint})
-    return _exec_session.status()
+    return s.status()
 
 
 @app.get("/api/exec/status")
 def exec_status():
-    if _exec_session is None:
+    s = _exec_session
+    if s is None:
         return {"state": "idle"}
-    return _exec_session.status()
+    return s.status()
 
 
 @app.post("/api/capture/start")

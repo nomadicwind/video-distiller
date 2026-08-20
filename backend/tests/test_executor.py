@@ -22,6 +22,18 @@ def _wait(sess, state, timeout=5.0):
     return False
 
 
+def test_status_surfaces_plan_warnings_and_manual_loops():
+    """status() 须透出 plan 中的 warnings/manual_loops（M4 review Fix 4），
+    供前端在执行台展示导出时留下的提醒。"""
+    plan = dict(PLAN)
+    plan["warnings"] = ["未知操作 xyz"]
+    plan["manual_loops"] = ["[段1] 循环：人工判断"]
+    s = ExecutionSession(plan, MockHost())
+    st = s.status()
+    assert st["warnings"] == ["未知操作 xyz"]
+    assert st["manual_loops"] == ["[段1] 循环：人工判断"]
+
+
 def test_run_to_done_injects_all_and_logs():
     h = MockHost()
     s = ExecutionSession(PLAN, h)

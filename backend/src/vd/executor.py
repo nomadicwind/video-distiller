@@ -148,4 +148,6 @@ class ExecutionSession:
                 "title": self.plan.get("title", ""),
                 "error": self.error,
                 "log": list(self.log[-50:]),
+                "warnings": self.plan.get("warnings", []),
+                "manual_loops": self.plan.get("manual_loops", []),
             }
