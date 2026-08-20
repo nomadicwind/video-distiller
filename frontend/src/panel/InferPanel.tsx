@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { Conflict, DiscoverResult, InferResult, Proposal, Skill } from '../api/types'
+import type { Conflict, DiscoverResult, InferResult, Proposal, Rotation, Section, Skill } from '../api/types'
 import { seekMs } from '../player/Player'
 import { useSession } from '../state/store'
 import { fmtTc } from '../time/frames'
@@ -17,12 +17,17 @@ export function InferPanel() {
   const [discover, setDiscover] = useState<DiscoverResult | null>(null)
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
-  useEffect(() => { void api.listSkills().then(setSkills) }, [])
+  const [rotations, setRotations] = useState<Rotation[]>([])
+  const [blockChecks, setBlockChecks] = useState<Record<string, boolean>>({})
 
-  const refreshProposals = () => {
+  useEffect(() => { void api.listSkills().then(setSkills) }, [])
+  useEffect(() => { void api.listRotations().then(setRotations) }, [proposals.length])
+
+  const refreshProposals = useCallback(() => {
     if (analysis) void api.listProposals(analysis.id).then(setProposals)
-  }
-  useEffect(() => { refreshProposals() }, [analysis?.id])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [analysis])
+
+  useEffect(() => { refreshProposals() }, [analysis?.id, refreshProposals])  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!analysis) return null
   const names = new Map(skills.map(s => [s.id, s.name]))
@@ -33,6 +38,18 @@ export function InferPanel() {
         : 'gap' in item ? `等待${item.gap}ms`
           : `${item.op} ${item.key ?? ''}`).join(' → ')
 
+  const rotName = (id: string) => rotations.find(r => r.id === id)?.name ?? id
+  const blockKey = (pid: string, si: number, bi: number) => `${pid}:${si}:${bi}`
+  const isChecked = (k: string) => blockChecks[k] !== false
+
+  const adjudicated = (p: Proposal): Section[] =>
+    (p.payload.sections ?? [])
+      .map((s, si) => ({
+        name: s.name,
+        body: s.body.filter((_, bi) => isChecked(blockKey(p.id, si, bi))),
+      }))
+      .filter(s => s.body.length > 0)
+
   return (
     <div className="entry-panel">
       <h3>推断</h3>
@@ -42,6 +59,7 @@ export function InferPanel() {
           const d = await api.runDiscover(analysis.id)
           setDiscover(d); refreshProposals()
         }}>发现循环</button>
+        <button onClick={async () => { await api.runCompose(analysis.id); refreshProposals() }}>编排方案</button>
       </p>
       {infer && (
         <div>
@@ -72,17 +90,51 @@ export function InferPanel() {
             {p.status === 'pending' ? '待裁决' : p.status === 'accepted' ? '✅ 已接受' : '❌ 已拒绝'}
           </span>
           <p>{p.payload.note}</p>
-          <p style={{ color: '#9c9' }}>
-            覆盖率 {(p.report.coverage * 100).toFixed(0)}% ·
-            完整 {p.report.complete}/{p.report.iterations} 次迭代
-          </p>
-          <p style={{ color: '#aaa' }}>{bodyText(p)}</p>
-          {p.report.warnings.map((w, i) => <p key={i} style={{ color: '#f80' }}>⚠ {w}</p>)}
-          {p.status === 'pending' && (
-            <p>
-              <button onClick={async () => { await api.acceptProposal(p.id); refreshProposals() }}>接受</button>
-              <button onClick={async () => { await api.rejectProposal(p.id); refreshProposals() }}>拒绝</button>
-            </p>
+          {p.kind === 'rotation' ? (
+            <>
+              <p style={{ color: '#9c9' }}>
+                覆盖率 {(p.report.coverage! * 100).toFixed(0)}% ·
+                完整 {p.report.complete}/{p.report.iterations} 次迭代
+              </p>
+              <p style={{ color: '#aaa' }}>{bodyText(p)}</p>
+              {p.report.warnings?.map((w, i) => <p key={i} style={{ color: '#f80' }}>⚠ {w}</p>)}
+              {p.status === 'pending' && (
+                <p>
+                  <button onClick={async () => { await api.acceptProposal(p.id); refreshProposals() }}>接受</button>
+                  <button onClick={async () => { await api.rejectProposal(p.id); refreshProposals() }}>拒绝</button>
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              {(p.payload.sections ?? []).map((s, si) => (
+                <div key={si}>
+                  <strong>§ {s.name}</strong>
+                  {s.body.map((b, bi) => (
+                    <p key={bi}>
+                      <label>
+                        <input type="checkbox"
+                          checked={isChecked(blockKey(p.id, si, bi))}
+                          disabled={p.status !== 'pending'}
+                          onChange={e => setBlockChecks({
+                            ...blockChecks, [blockKey(p.id, si, bi)]: e.target.checked })} />
+                        {b.rotation ? `【循环】${rotName(b.rotation)}` : JSON.stringify(b)}
+                      </label>
+                    </p>
+                  ))}
+                </div>
+              ))}
+              {p.status === 'pending' && (
+                <p>
+                  <button
+                    disabled={adjudicated(p).length === 0}
+                    onClick={async () => { await api.acceptProposal(p.id, adjudicated(p)); refreshProposals() }}>
+                    接受勾选块
+                  </button>
+                  <button onClick={async () => { await api.rejectProposal(p.id); refreshProposals() }}>拒绝</button>
+                </p>
+              )}
+            </>
           )}
         </div>
       ))}

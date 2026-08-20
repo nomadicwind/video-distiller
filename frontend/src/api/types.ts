@@ -91,7 +91,7 @@ export interface Playbook {
 export interface PlaybookVersion { version: number; created_at: string }
 
 export interface Proposal {
-  id: string; analysis_id: string; kind: 'rotation'
+  id: string; analysis_id: string; kind: 'rotation' | 'playbook'
   payload: {
     name: string; note: string
     body?: Record<string, unknown>[]
@@ -100,8 +100,11 @@ export interface Proposal {
     sections?: Section[]
   }
   report: {
-    iterations: number; complete: number; coverage: number
-    warnings: string[]; uncovered_before: number; uncovered_after: number
+    // rotation report fields
+    iterations?: number; complete?: number; coverage?: number
+    warnings?: string[]; uncovered_before?: number; uncovered_after?: number
+    // playbook report fields
+    rotations_used?: number; unknown_dropped?: number; missing_appended?: number; fallback?: boolean
   }
   status: 'pending' | 'accepted' | 'rejected'
 }
