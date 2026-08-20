@@ -66,3 +66,93 @@ def _pull_then_process(video_id: str, url: str) -> None:
     finally:
         conn.close()
     ingest.process(video_id)
+
+
+class AnalysisReq(BaseModel):
+    video_id: str
+
+
+@app.post("/api/analyses")
+def create_analysis(req: AnalysisReq, conn=Depends(get_conn)):
+    try:
+        return store.create_analysis(conn, req.video_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/analyses")
+def list_analyses(video_id: str, conn=Depends(get_conn)):
+    rows = conn.execute(
+        "SELECT * FROM analyses WHERE video_id=? ORDER BY seq", (video_id,))
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/analyses/{analysis_id}")
+def analysis(analysis_id: str, conn=Depends(get_conn)):
+    tree = store.get_analysis_tree(conn, analysis_id)
+    if tree is None:
+        raise HTTPException(404)
+    return tree
+
+
+@app.post("/api/lanes/{lane_id}/takes")
+def new_take(lane_id: str, conn=Depends(get_conn)):
+    return store.create_take(conn, lane_id)
+
+
+class MarkReq(BaseModel):
+    t_ms: int
+    kind: str
+    label: str | None = None
+    end_ms: int | None = None
+
+
+@app.post("/api/takes/{take_id}/marks")
+def new_mark(take_id: str, req: MarkReq, conn=Depends(get_conn)):
+    try:
+        return store.insert_mark(conn, take_id, t_ms=req.t_ms, kind=req.kind,
+                                 label=req.label, end_ms=req.end_ms)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class MarkPatch(BaseModel):
+    t_ms: int | None = None
+    end_ms: int | None = None
+    label: str | None = None
+    clear_end: bool = False
+
+
+@app.patch("/api/marks/{mark_id}")
+def patch_mark(mark_id: str, req: MarkPatch, conn=Depends(get_conn)):
+    fields = {k: v for k, v in req.model_dump().items()
+              if k != "clear_end" and v is not None}
+    if req.clear_end:
+        fields["end_ms"] = None
+    if not fields:
+        raise HTTPException(400, "empty patch")
+    try:
+        return store.update_mark(conn, mark_id, **fields)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/marks/{mark_id}")
+def del_mark(mark_id: str, conn=Depends(get_conn)):
+    store.delete_mark(conn, mark_id)
+    return {"ok": True}
+
+
+class TallyReq(BaseModel):
+    t_ms: int
+
+
+@app.post("/api/analyses/{analysis_id}/tally")
+def add_tally(analysis_id: str, req: TallyReq, conn=Depends(get_conn)):
+    return store.add_tally(conn, analysis_id, req.t_ms)
+
+
+@app.delete("/api/analyses/{analysis_id}/tally")
+def clear_tally(analysis_id: str, conn=Depends(get_conn)):
+    store.clear_tally(conn, analysis_id)
+    return {"ok": True}
