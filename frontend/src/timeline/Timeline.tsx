@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Aggregate, Video } from '../api/types'
+import { toggleHolding } from '../actions'
+import { seekMs } from '../player/Player'
 import { useSession } from '../state/store'
 import { draw, timelineHeight } from './draw'
+import { checkboxRect, hitTestMark, holdingPatch, inRect, intervals, LANE_H, panned, pxToMs, TOP_H, zoomed } from './layout'
 import type { Viewport } from './layout'
 
 export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggregate | null }) {
@@ -47,6 +50,48 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     })
   })
 
+  const vp = (): Viewport =>
+    ({ ...viewport, widthPx: canvasRef.current?.parentElement?.clientWidth ?? 800 })
+
+  const onClick = (e: React.MouseEvent) => {
+    const a = s.analysis
+    const canvas = canvasRef.current
+    if (!a || !canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const yPos = e.clientY - rect.top
+    const laneIdx = Math.floor((yPos - TOP_H) / LANE_H)
+    const lane = a.lanes[laneIdx]
+    if (!lane) return
+    if (lane.id !== s.laneId) { s.selectLane(lane.id); return }
+    const take = lane.takes.find(t => t.id === s.takeId)
+    if (!take) return
+    const v = vp()
+    for (const iv of intervals(take.marks)) {
+      if (inRect(checkboxRect(iv.midMs, v, TOP_H + laneIdx * LANE_H), x, yPos)) {
+        const { markId, patch } = holdingPatch(iv, !iv.holding)
+        void toggleHolding(markId, patch)
+        return
+      }
+    }
+    const hit = hitTestMark(take.marks, v, x)
+    s.selectMark(hit)
+    if (hit) {
+      const m = take.marks.find(mm => mm.id === hit)!
+      seekMs(m.t_ms)
+    }
+  }
+
+  const onWheel = (e: React.WheelEvent) => {
+    const v = vp()
+    const rect = canvasRef.current!.getBoundingClientRect()
+    if (e.ctrlKey || e.metaKey) {
+      setViewport(zoomed(v, e.deltaY > 0 ? 1.25 : 0.8, pxToMs(v, e.clientX - rect.left), durationMs))
+    } else {
+      setViewport(panned(v, Math.round((e.deltaY + e.deltaX) * (v.endMs - v.startMs) / 1000), durationMs))
+    }
+  }
+
   if (!s.analysis) return null
-  return <canvas ref={canvasRef} />
+  return <canvas ref={canvasRef} onClick={onClick} onWheel={onWheel} />
 }
