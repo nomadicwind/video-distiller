@@ -109,3 +109,36 @@ def test_delete_pending_proposals_keeps_adjudicated(conn):
     assert store.delete_pending_proposals(conn, tree["id"], kind="rotation") == 1
     remaining = store.list_proposals(conn, tree["id"])
     assert [p["status"] for p in remaining] == ["accepted"]
+
+
+def test_playbook_lifecycle_with_versions(conn):
+    pb = store.create_playbook(conn, name="法师单体", sections=[
+        {"name": "开场", "body": [{"skill": "sk_a"}, {"gap": 400}]}])
+    assert pb["version"] == 1
+    pb2 = store.save_playbook(conn, pb["id"], sections=[
+        {"name": "开场", "body": [{"skill": "sk_a"}]},
+        {"name": "稳定输出", "body": [{"rotation": "rot_1", "iterations": 2, "pinned": True}]}])
+    assert pb2["version"] == 2
+    versions = store.list_playbook_versions(conn, pb["id"])
+    assert [v["version"] for v in versions] == [1, 2]
+    pb3 = store.rollback_playbook(conn, pb["id"], 1)
+    assert pb3["version"] == 3                          # 回滚 = 旧快照存为新版本
+    assert pb3["sections"][0]["body"] == [{"skill": "sk_a"}, {"gap": 400}]
+
+
+def test_validate_sections_rejects_bad_blocks(conn):
+    with pytest.raises(ValueError):
+        store.create_playbook(conn, name="坏", sections=[{"name": "s", "body": [{"boom": 1}]}])
+    with pytest.raises(ValueError):
+        store.create_playbook(conn, name="坏2", sections=[{"name": "s", "body": [
+            {"rotation": "r", "iterations": 0}]}])
+    with pytest.raises(ValueError):
+        store.create_playbook(conn, name="坏3", sections=[{"name": "s", "body": [{"gap": "x"}]}])
+    with pytest.raises(ValueError):
+        store.create_playbook(conn, name="坏4", sections=[{"body": []}])       # 段落缺 name
+
+
+def test_get_rotation(conn):
+    r = store.create_rotation(conn, name="r", body=[])
+    assert store.get_rotation(conn, r["id"])["name"] == "r"
+    assert store.get_rotation(conn, "nope") is None

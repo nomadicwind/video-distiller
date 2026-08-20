@@ -363,3 +363,111 @@ def delete_pending_proposals(conn, analysis_id, kind) -> int:
         (analysis_id, kind))
     conn.commit()
     return cur.rowcount
+
+
+# ---- Playbook（spec §5.8/§7.7 版本链）----
+
+VALID_BLOCK_KEYS = ("rotation", "skill", "gap", "note")
+
+
+def validate_sections(sections: list) -> None:
+    if not isinstance(sections, list):
+        raise ValueError("sections must be a list")
+    for sec in sections:
+        if not isinstance(sec, dict) or not sec.get("name"):
+            raise ValueError("每个段落必须有 name")
+        for block in sec.get("body", []):
+            keys = [k for k in VALID_BLOCK_KEYS if k in block]
+            if len(keys) != 1:
+                raise ValueError(f"块必须恰含一个主键 {VALID_BLOCK_KEYS}: {block!r}")
+            kind = keys[0]
+            if kind == "rotation" and "iterations" in block:
+                if not isinstance(block["iterations"], int) or block["iterations"] < 1:
+                    raise ValueError("iterations 必须是 ≥1 的整数")
+            if kind == "gap" and not isinstance(block["gap"], int):
+                raise ValueError("gap 块 ms 必须是整数")
+
+
+def _playbook_row(r) -> dict | None:
+    if r is None:
+        return None
+    d = dict(r)
+    d["sections"] = json.loads(d["sections"])
+    d["derived_from"] = json.loads(d["derived_from"])
+    return d
+
+
+def _snapshot_playbook(conn, playbook: dict) -> None:
+    conn.execute(
+        "INSERT INTO playbook_versions(id,playbook_id,version,snapshot,created_at)"
+        " VALUES(?,?,?,?,?)",
+        (_id("pv"), playbook["id"], playbook["version"],
+         json.dumps(playbook, ensure_ascii=False), _now()),
+    )
+
+
+def create_playbook(conn, *, name, class_=None, keymap_id=None, keymap_version=None,
+                    sections=None, derived_from=None):
+    sections = sections or []
+    validate_sections(sections)
+    pid = _id("pb")
+    conn.execute(
+        "INSERT INTO playbooks(id,name,class,keymap_id,keymap_version,sections,"
+        "derived_from,version,created_at) VALUES(?,?,?,?,?,?,?,1,?)",
+        (pid, name, class_, keymap_id, keymap_version,
+         json.dumps(sections, ensure_ascii=False),
+         json.dumps(derived_from or [], ensure_ascii=False), _now()),
+    )
+    pb = get_playbook(conn, pid)
+    _snapshot_playbook(conn, pb)
+    conn.commit()
+    return pb
+
+
+def get_playbook(conn, playbook_id):
+    return _playbook_row(conn.execute(
+        "SELECT * FROM playbooks WHERE id=?", (playbook_id,)).fetchone())
+
+
+def list_playbooks(conn):
+    return [_playbook_row(r) for r in conn.execute(
+        "SELECT * FROM playbooks ORDER BY created_at")]
+
+
+def save_playbook(conn, playbook_id, *, sections, name=None):
+    validate_sections(sections)
+    pb = get_playbook(conn, playbook_id)
+    if pb is None:
+        raise ValueError("playbook not found")
+    new_version = pb["version"] + 1
+    conn.execute(
+        "UPDATE playbooks SET sections=?, version=?, name=? WHERE id=?",
+        (json.dumps(sections, ensure_ascii=False), new_version,
+         name or pb["name"], playbook_id),
+    )
+    pb = get_playbook(conn, playbook_id)
+    _snapshot_playbook(conn, pb)
+    conn.commit()
+    return pb
+
+
+def list_playbook_versions(conn, playbook_id):
+    return [{"version": r["version"], "created_at": r["created_at"]}
+            for r in conn.execute(
+                "SELECT version, created_at FROM playbook_versions"
+                " WHERE playbook_id=? ORDER BY version", (playbook_id,))]
+
+
+def rollback_playbook(conn, playbook_id, version):
+    row = conn.execute(
+        "SELECT snapshot FROM playbook_versions WHERE playbook_id=? AND version=?",
+        (playbook_id, version)).fetchone()
+    if row is None:
+        raise ValueError("version not found")
+    old = json.loads(row["snapshot"])
+    return save_playbook(conn, playbook_id, sections=old["sections"], name=old["name"])
+
+
+def get_rotation(conn, rotation_id):
+    return _rotation_row(conn.execute(
+        "SELECT * FROM rotations WHERE id=?", (rotation_id,)).fetchone())
