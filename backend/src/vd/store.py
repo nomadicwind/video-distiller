@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -164,3 +165,183 @@ def add_tally(conn, analysis_id, t_ms):
 def clear_tally(conn, analysis_id):
     conn.execute("DELETE FROM tally_markers WHERE analysis_id=?", (analysis_id,))
     conn.commit()
+
+
+# ---- Skill Catalog（spec §5.4/§5.5）----
+
+PATTERN_OPS = ("tap", "hold", "chord", "wheel", "gap", "skill")
+
+
+def validate_pattern(pattern: list) -> None:
+    if not isinstance(pattern, list):
+        raise ValueError("pattern must be a list")
+    for item in pattern:
+        op = item.get("op")
+        if op not in PATTERN_OPS:
+            raise ValueError(f"unknown op: {op!r}")
+        if op == "tap" and not item.get("key"):
+            raise ValueError("tap requires key")
+        if op == "hold" and not (item.get("key") or item.get("button")):
+            raise ValueError("hold requires key/button")
+        if op == "chord" and not item.get("keys"):
+            raise ValueError("chord requires keys")
+        if op == "gap" and "ms" not in item:
+            raise ValueError("gap requires ms")
+        if op == "skill" and not item.get("ref"):
+            raise ValueError("skill requires ref")
+
+
+def skill_layer(skill: dict) -> str:
+    """层级判据（spec §3.3）：pattern 含 skill(ref) = L2，否则 L1。"""
+    return "L2" if any(i.get("op") == "skill" for i in skill["pattern"]) else "L1"
+
+
+def _skill_row(r) -> dict | None:
+    if r is None:
+        return None
+    d = dict(r)
+    d["pattern"] = json.loads(d["pattern"])
+    d["cancelable"] = bool(d["cancelable"])
+    return d
+
+
+def create_skill(conn, *, name, class_=None, cd_ms=None, cast_ms=None,
+                 anim_ms=None, cancelable=False, pattern=None):
+    pattern = pattern or []
+    validate_pattern(pattern)
+    sid = _id("sk")
+    conn.execute(
+        "INSERT INTO skills(id,name,class,cd_ms,cast_ms,anim_ms,cancelable,pattern,created_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?)",
+        (sid, name, class_, cd_ms, cast_ms, anim_ms, int(cancelable),
+         json.dumps(pattern, ensure_ascii=False), _now()),
+    )
+    conn.commit()
+    return get_skill(conn, sid)
+
+
+def get_skill(conn, skill_id):
+    return _skill_row(conn.execute("SELECT * FROM skills WHERE id=?", (skill_id,)).fetchone())
+
+
+def list_skills(conn):
+    return [_skill_row(r) for r in conn.execute("SELECT * FROM skills ORDER BY name")]
+
+
+def update_skill(conn, skill_id, **fields):
+    if "pattern" in fields:
+        validate_pattern(fields["pattern"])
+        fields["pattern"] = json.dumps(fields["pattern"], ensure_ascii=False)
+    if "cancelable" in fields:
+        fields["cancelable"] = int(fields["cancelable"])
+    keys = ",".join(f"{k}=?" for k in fields)
+    conn.execute(f"UPDATE skills SET {keys} WHERE id=?", (*fields.values(), skill_id))
+    conn.commit()
+    return get_skill(conn, skill_id)
+
+
+def delete_skill(conn, skill_id):
+    conn.execute("DELETE FROM skills WHERE id=?", (skill_id,))
+    conn.commit()
+
+
+# ---- Keymap（spec §5.6：改动 = 新版本）----
+
+def _keymap_row(r) -> dict | None:
+    if r is None:
+        return None
+    d = dict(r)
+    d["binds"] = json.loads(d["binds"])
+    return d
+
+
+def save_keymap(conn, *, keymap_id, class_=None, binds):
+    version = conn.execute(
+        "SELECT COALESCE(MAX(version),0)+1 AS v FROM keymaps WHERE id=?", (keymap_id,)
+    ).fetchone()["v"]
+    conn.execute(
+        "INSERT INTO keymaps(id,version,class,binds,created_at) VALUES(?,?,?,?,?)",
+        (keymap_id, version, class_, json.dumps(binds, ensure_ascii=False), _now()),
+    )
+    conn.commit()
+    return get_keymap(conn, keymap_id, version)
+
+
+def get_keymap(conn, keymap_id, version):
+    return _keymap_row(conn.execute(
+        "SELECT * FROM keymaps WHERE id=? AND version=?", (keymap_id, version)).fetchone())
+
+
+def list_keymaps(conn):
+    return [_keymap_row(r) for r in conn.execute(
+        "SELECT * FROM keymaps ORDER BY id, version")]
+
+
+def bind_analysis_keymap(conn, analysis_id, keymap_id, version):
+    conn.execute("UPDATE analyses SET keymap_id=?, keymap_version=? WHERE id=?",
+                 (keymap_id, version, analysis_id))
+    conn.commit()
+    return _row(conn.execute("SELECT * FROM analyses WHERE id=?", (analysis_id,)))
+
+
+# ---- Proposal / Rotation（spec §7.7）----
+
+def _proposal_row(r) -> dict | None:
+    if r is None:
+        return None
+    d = dict(r)
+    d["payload"] = json.loads(d["payload"])
+    d["report"] = json.loads(d["report"])
+    return d
+
+
+def create_proposal(conn, *, analysis_id, kind, payload, report):
+    pid = _id("pp")
+    conn.execute(
+        "INSERT INTO proposals(id,analysis_id,kind,payload,report,created_at)"
+        " VALUES(?,?,?,?,?,?)",
+        (pid, analysis_id, kind, json.dumps(payload, ensure_ascii=False),
+         json.dumps(report, ensure_ascii=False), _now()),
+    )
+    conn.commit()
+    return _proposal_row(conn.execute("SELECT * FROM proposals WHERE id=?", (pid,)).fetchone())
+
+
+def list_proposals(conn, analysis_id):
+    return [_proposal_row(r) for r in conn.execute(
+        "SELECT * FROM proposals WHERE analysis_id=? ORDER BY created_at", (analysis_id,))]
+
+
+def set_proposal_status(conn, proposal_id, status):
+    conn.execute("UPDATE proposals SET status=? WHERE id=?", (status, proposal_id))
+    conn.commit()
+    return _proposal_row(conn.execute(
+        "SELECT * FROM proposals WHERE id=?", (proposal_id,)).fetchone())
+
+
+def _rotation_row(r) -> dict | None:
+    if r is None:
+        return None
+    d = dict(r)
+    d["body"] = json.loads(d["body"])
+    d["params"] = json.loads(d["params"])
+    d["derived_from"] = json.loads(d["derived_from"])
+    return d
+
+
+def create_rotation(conn, *, name, body, params=None, note=None, derived_from=None):
+    rid = _id("rot")
+    conn.execute(
+        "INSERT INTO rotations(id,name,body,params,note,derived_from,created_at)"
+        " VALUES(?,?,?,?,?,?,?)",
+        (rid, name, json.dumps(body, ensure_ascii=False),
+         json.dumps(params or [], ensure_ascii=False), note,
+         json.dumps(derived_from or [], ensure_ascii=False), _now()),
+    )
+    conn.commit()
+    return _rotation_row(conn.execute("SELECT * FROM rotations WHERE id=?", (rid,)).fetchone())
+
+
+def list_rotations(conn):
+    return [_rotation_row(r) for r in conn.execute(
+        "SELECT * FROM rotations ORDER BY created_at")]

@@ -1,0 +1,83 @@
+import pytest
+
+from vd import db, store
+
+
+@pytest.fixture
+def conn():
+    c = db.connect()
+    yield c
+    c.close()
+
+
+def test_skill_crud_roundtrip(conn):
+    s = store.create_skill(conn, name="火球术", class_="法师", cd_ms=6000,
+                           cast_ms=400, anim_ms=720,
+                           pattern=[{"op": "tap", "key": "2"}])
+    assert s["pattern"] == [{"op": "tap", "key": "2"}]
+    assert store.skill_layer(s) == "L1"
+    s2 = store.update_skill(conn, s["id"], anim_ms=750)
+    assert s2["anim_ms"] == 750
+    assert len(store.list_skills(conn)) == 1
+    store.delete_skill(conn, s["id"])
+    assert store.list_skills(conn) == []
+
+
+def test_skill_layer_by_content(conn):
+    combo = store.create_skill(conn, name="冰火连携", pattern=[
+        {"op": "skill", "ref": "sk_a"},
+        {"op": "gap", "ms": 300, "tol_ms": 80},
+        {"op": "skill", "ref": "sk_b"}])
+    assert store.skill_layer(combo) == "L2"
+    multikey = store.create_skill(conn, name="旋风连", pattern=[
+        {"op": "tap", "key": "Q"}, {"op": "gap", "ms": 300},
+        {"op": "tap", "key": "Q"}])
+    assert store.skill_layer(multikey) == "L1"     # 纯操作多步仍是 L1（spec §3.3）
+
+
+def test_pattern_validation(conn):
+    with pytest.raises(ValueError):
+        store.create_skill(conn, name="坏", pattern=[{"op": "explode"}])
+    with pytest.raises(ValueError):
+        store.create_skill(conn, name="坏2", pattern=[{"op": "tap"}])   # tap 缺 key
+    with pytest.raises(ValueError):
+        store.create_skill(conn, name="坏3", pattern=[{"op": "skill"}]) # skill 缺 ref
+
+
+def test_keymap_always_new_version(conn):
+    k1 = store.save_keymap(conn, keymap_id="km_mage", class_="法师",
+                           binds={"sk_fireball": ["2"]})
+    k2 = store.save_keymap(conn, keymap_id="km_mage",
+                           binds={"sk_fireball": ["2"], "sk_blink": ["Shift+2"]})
+    assert (k1["version"], k2["version"]) == (1, 2)
+    old = store.get_keymap(conn, "km_mage", 1)
+    assert old["binds"] == {"sk_fireball": ["2"]}      # 旧版本语义不漂移（spec §5.6）
+
+
+def test_analysis_keymap_binding(conn):
+    v = store.create_video(conn, name="a.mp4", source_kind="upload")
+    tree = store.create_analysis(conn, v["id"])
+    store.save_keymap(conn, keymap_id="km_mage", binds={})
+    a = store.bind_analysis_keymap(conn, tree["id"], "km_mage", 1)
+    assert (a["keymap_id"], a["keymap_version"]) == ("km_mage", 1)
+
+
+def test_proposal_lifecycle(conn):
+    v = store.create_video(conn, name="a.mp4", source_kind="upload")
+    tree = store.create_analysis(conn, v["id"])
+    p = store.create_proposal(conn, analysis_id=tree["id"], kind="rotation",
+                              payload={"name": "x", "body": []},
+                              report={"coverage": 0.9})
+    assert p["status"] == "pending"
+    assert p["payload"]["name"] == "x"
+    p2 = store.set_proposal_status(conn, p["id"], "accepted")
+    assert p2["status"] == "accepted"
+    assert len(store.list_proposals(conn, tree["id"])) == 1
+
+
+def test_rotation_create(conn):
+    r = store.create_rotation(conn, name="单体稳定输出",
+                              body=[{"skill": "sk_a"}, {"gap": 180}],
+                              derived_from=["an_1"])
+    assert store.list_rotations(conn)[0]["name"] == "单体稳定输出"
+    assert r["derived_from"] == ["an_1"]
