@@ -1,15 +1,17 @@
+/* styles.css — 全局基础（tokens.css 之后加载） */
+* { box-sizing: border-box; }
 :root { color-scheme: dark; }
-body { margin: 0; font: 13px/1.5 system-ui, sans-serif; background: #16181d; color: #ddd; }
-button { margin: 2px; }
-button.active { outline: 2px solid #5af; }
-video { width: 100%; max-height: 45vh; background: #000; }
+body { margin: 0; font: 13px/1.5 var(--font-ui); background: var(--bg-app); color: var(--text-1); }
+button { font: inherit; }
+input, select, textarea {
+  font: inherit; color: var(--text-1); background: var(--bg-inset);
+  border: 1px solid var(--border); border-radius: var(--radius-s); padding: 4px 8px;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+video { width: 100%; max-height: 46vh; background: #000; display: block; }
 canvas { display: block; }
-.workbench { display: grid; grid-template-columns: 1fr 300px; gap: 8px; padding: 8px; }
-.workbench .main { min-width: 0; }
-.entry-panel { border-left: 1px solid #333; padding: 8px; }
-.entry-panel .keys button { min-width: 40px; }
-.tally-bar { display: flex; gap: 16px; align-items: center; padding: 4px 8px; background: #1e2128; }
-.strip { user-select: none; }
-.library { max-width: 720px; margin: 40px auto; }
-.library table { width: 100%; border-collapse: collapse; }
-.library td { padding: 4px 8px; border-bottom: 1px solid #333; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--bg-control); border-radius: 5px; border: 2px solid var(--bg-panel); }
