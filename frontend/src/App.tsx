@@ -10,6 +10,8 @@ import { useSession } from './state/store'
 import { EntryPanel } from './panel/EntryPanel'
 import { InferPanel } from './panel/InferPanel'
 import { ErrorBar } from './ErrorBar'
+import { CatalogPage } from './pages/CatalogPage'
+import { KeymapPage } from './pages/KeymapPage'
 
 function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   const analysis = useSession(s => s.analysis)
@@ -82,7 +84,7 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
   )
 }
 
-function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
+function VideoLibrary({ onOpen, onCatalog, onKeymap }: { onOpen: (v: Video) => void; onCatalog: () => void; onKeymap: () => void }) {
   const [videos, setVideos] = useState<Video[]>([])
   const [url, setUrl] = useState('')
   const refresh = () => { void api.listVideos().then(setVideos) }
@@ -96,6 +98,10 @@ function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
   return (
     <div className="library">
       <h1>Video Distiller</h1>
+      <p>
+        <button onClick={onCatalog}>技能目录</button>
+        <button onClick={onKeymap}>键位设置</button>
+      </p>
       <p>
         上传视频：
         <input type="file" accept="video/*" onChange={async e => {
@@ -131,13 +137,10 @@ function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
 
 export default function App() {
   const [video, setVideo] = useState<Video | null>(null)
-  return (
-    <>
-      <ErrorBar />
-      {video
-        ? <Workbench video={video} onBack={() => setVideo(null)} />
-        : <VideoLibrary onOpen={setVideo} />
-      }
-    </>
-  )
+  const [page, setPage] = useState<'library' | 'catalog' | 'keymap'>('library')
+  if (video) return <><ErrorBar /><Workbench video={video} onBack={() => setVideo(null)} /></>
+  if (page === 'catalog') return <><ErrorBar /><CatalogPage onBack={() => setPage('library')} /></>
+  if (page === 'keymap') return <><ErrorBar /><KeymapPage onBack={() => setPage('library')} /></>
+  return <><ErrorBar /><VideoLibrary onOpen={setVideo}
+    onCatalog={() => setPage('catalog')} onKeymap={() => setPage('keymap')} /></>
 }
