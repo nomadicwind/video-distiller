@@ -1,3 +1,6 @@
+import json
+import time
+
 import pytest
 
 
@@ -431,3 +434,78 @@ def test_put_playbook_rejects_non_dict_block_400(client, analysis):
     r = client.put(f"/api/playbooks/{pb['id']}",
                    json={"sections": [{"name": "x", "body": ["rotation"]}]})
     assert r.status_code == 400
+
+
+def test_exec_lifecycle_and_backfeed(client, analysis, monkeypatch):
+    from vd import api as api_module
+    from vd.host import MockHost
+    h = MockHost()
+    monkeypatch.setattr(api_module, "_exec_host", h)
+
+    _, pb = _make_playbook(client, analysis)
+    an_id = analysis["id"]
+
+    r = client.post("/api/exec/start", json={"kind": "playbook", "id": pb["id"]})
+    assert r.status_code == 200
+    st = None
+    for _ in range(100):
+        st = client.get("/api/exec/status").json()
+        if st["state"] == "done":
+            break
+        time.sleep(0.02)
+    assert st["state"] == "done"
+    assert len(h.injected) == st["total"] > 0
+
+    r = client.post("/api/exec/backfeed", json={"analysis_id": an_id})
+    assert r.status_code == 200
+    take = r.json()
+    assert take["marks"]
+    assert all(m["provenance"] == "execution_log" for m in take["marks"])
+
+
+def test_exec_start_conflict_and_stop(client, analysis, monkeypatch):
+    from vd import api as api_module
+    from vd.host import MockHost
+    monkeypatch.setattr(api_module, "_exec_host", MockHost())
+    _, pb = _make_playbook(client, analysis)
+    slow_events = [{"t_ms": i * 100, "action": "tap", "key": "q"} for i in range(50)]
+    monkeypatch.setattr(
+        api_module.emit_plan, "render_playbook_plan",
+        lambda *a, **k: json.dumps({"format": "vd-plan", "version": 1,
+                                    "title": "t", "stop_hotkey": "F12",
+                                    "events": slow_events,
+                                    "manual_loops": [], "warnings": []}))
+    assert client.post("/api/exec/start",
+                       json={"kind": "playbook", "id": pb["id"]}).status_code == 200
+    assert client.post("/api/exec/start",
+                       json={"kind": "playbook", "id": pb["id"]}).status_code == 409
+    assert client.post("/api/exec/stop").status_code == 200
+    assert client.get("/api/exec/status").json()["state"] == "stopped"
+
+
+def test_execution_log_takes_excluded_from_aggregation(client, analysis):
+    lane = analysis["lanes"][0]
+    t1 = lane["takes"][0]
+    client.post(f"/api/takes/{t1['id']}/marks",
+                json={"t_ms": 1000, "kind": "input", "label": "Q"})
+    from vd import db, store
+    conn = db.connect()
+    t2 = store.create_take(conn, lane["id"])
+    store.insert_mark(conn, t2["id"], t_ms=99000, kind="input", label="Q",
+                      provenance="execution_log")
+    conn.close()
+    agg = client.get(f"/api/lanes/{lane['id']}/aggregate").json()["aggregated"]
+    assert [m["t_ms"] for m in agg] == [1000]   # 99000 不得影响中位数
+
+
+def test_capture_roundtrip_with_mock(client, sample_video, monkeypatch, tmp_path):
+    from vd import api as api_module
+    from vd.host import MockHost
+    fixture = tmp_path / "cap.mp4"
+    import shutil
+    shutil.copyfile(sample_video, fixture)
+    monkeypatch.setattr(api_module, "_exec_host", MockHost(capture_fixture=str(fixture)))
+    assert client.post("/api/capture/start").status_code == 200
+    r = client.post("/api/capture/stop")
+    assert r.status_code == 200
+    assert r.json()["id"].startswith("vid_")

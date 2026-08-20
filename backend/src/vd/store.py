@@ -120,12 +120,14 @@ def _validate_mark(t_ms, end_ms, kind, label):
         raise ValueError("release mark must not carry label")
 
 
-def insert_mark(conn, take_id, *, t_ms, kind, label=None, end_ms=None):
+def insert_mark(conn, take_id, *, t_ms, kind, label=None, end_ms=None,
+                provenance="human_manual"):
     _validate_mark(t_ms, end_ms, kind, label)
     mid = _id("mk")
     conn.execute(
-        "INSERT INTO marks(id,take_id,t_ms,end_ms,kind,label) VALUES(?,?,?,?,?,?)",
-        (mid, take_id, t_ms, end_ms, kind, label),
+        "INSERT INTO marks(id,take_id,t_ms,end_ms,kind,label,provenance)"
+        " VALUES(?,?,?,?,?,?,?)",
+        (mid, take_id, t_ms, end_ms, kind, label, provenance),
     )
     conn.commit()
     return _row(conn.execute("SELECT * FROM marks WHERE id=?", (mid,)))

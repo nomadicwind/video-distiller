@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from pathlib import Path
 from typing import Iterator, Literal
 
@@ -8,10 +9,15 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response, Streami
 from pydantic import BaseModel
 
 from vd import agent, align, aggregate as agg, db, ingest, store, discover, matcher, ops as ops_module
+from vd import executor as vd_executor
+from vd import host as vd_host
 from vd.config import data_root
 from vd.emit import ahk as emit_ahk, md as emit_md, plan as emit_plan, razer as emit_razer
 
 app = FastAPI(title="Video Distiller")
+
+_exec_host = vd_host.get_host()
+_exec_session: vd_executor.ExecutionSession | None = None
 
 
 def get_conn():
@@ -223,14 +229,23 @@ def clear_tally(analysis_id: str, conn=Depends(get_conn)):
     return {"ok": True}
 
 
-@app.get("/api/lanes/{lane_id}/aggregate")
-def lane_aggregate(lane_id: str, window_ms: int = 300, conn=Depends(get_conn)):
+def _lane_takes_marks(conn, lane_id: str) -> list[list[dict]]:
+    """按 take 收集 marks；跳过非空且全部 marks provenance=='execution_log' 的
+    take（回灌产生的执行日志本身不参与聚合，spec §9.3）。"""
     takes = []
     for t in conn.execute(
             "SELECT id FROM takes WHERE lane_id=? ORDER BY idx", (lane_id,)):
         marks = [dict(r) for r in conn.execute(
             "SELECT * FROM marks WHERE take_id=? ORDER BY t_ms", (t["id"],))]
+        if marks and all(m["provenance"] == "execution_log" for m in marks):
+            continue
         takes.append(marks)
+    return takes
+
+
+@app.get("/api/lanes/{lane_id}/aggregate")
+def lane_aggregate(lane_id: str, window_ms: int = 300, conn=Depends(get_conn)):
+    takes = _lane_takes_marks(conn, lane_id)
     return agg.aggregate_lane(takes, window_ms=window_ms)
 
 
@@ -386,12 +401,7 @@ def _agent_client():
 
 
 def _aggregated_lane_marks(conn, lane_id: str) -> list[dict]:
-    takes = []
-    for t in conn.execute(
-            "SELECT id FROM takes WHERE lane_id=? ORDER BY idx", (lane_id,)):
-        takes.append([dict(r) for r in conn.execute(
-            "SELECT * FROM marks WHERE take_id=? ORDER BY t_ms", (t["id"],))])
-    return agg.aggregate_lane(takes)["aggregated"]
+    return agg.aggregate_lane(_lane_takes_marks(conn, lane_id))["aggregated"]
 
 
 def _analysis_inputs(conn, analysis_id: str):
@@ -605,3 +615,145 @@ def rollback(playbook_id: str, req: RollbackReq, conn=Depends(get_conn)):
         return store.rollback_playbook(conn, playbook_id, req.version)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+# ---- 执行控制台 / 采集 / 回灌（spec §9.3）----
+#
+# 进程内单会话：本地单用户工具，不需要跨会话/跨进程的执行状态。
+#
+# ⚠ 路由注册顺序约束：/api/exec/start 与 /api/exec/backfeed 必须先于
+# /api/exec/{cmd} 注册，否则会被 {cmd} 的路径参数通配捕获。
+
+
+class ExecStartReq(BaseModel):
+    kind: str
+    id: str
+    speed: float = 1.0
+
+
+@app.post("/api/exec/start")
+def exec_start(req: ExecStartReq, conn=Depends(get_conn)):
+    global _exec_session
+    if req.kind not in ("rotation", "playbook"):
+        raise HTTPException(400, "kind 须为 rotation|playbook")
+    if _exec_session is not None and _exec_session.state in ("running", "paused"):
+        raise HTTPException(409, "已有执行在进行")
+    skills_by_id, rotations_by_id = _export_context(conn)
+    if req.kind == "playbook":
+        pb = store.get_playbook(conn, req.id)
+        if pb is None:
+            raise HTTPException(404, "playbook not found")
+        binds = {}
+        if pb.get("keymap_id"):
+            km = store.get_keymap(conn, pb["keymap_id"], pb["keymap_version"])
+            binds = km["binds"] if km else {}
+        text = emit_plan.render_playbook_plan(pb, rotations_by_id, skills_by_id, binds)
+    else:
+        rot = store.get_rotation(conn, req.id)
+        if rot is None:
+            raise HTTPException(404, "rotation not found")
+        text = emit_plan.render_rotation_plan(rot, skills_by_id, {})
+    plan_doc = json.loads(text)
+    _exec_session = vd_executor.ExecutionSession(plan_doc, _exec_host, speed=req.speed)
+    try:
+        _exec_session.start()
+    except vd_host.HostError as e:
+        raise HTTPException(500, {"code": e.code, "hint": e.hint})
+    return _exec_session.status()
+
+
+class BackfeedReq(BaseModel):
+    analysis_id: str
+
+
+@app.post("/api/exec/backfeed")
+def exec_backfeed(req: BackfeedReq, conn=Depends(get_conn)):
+    if _exec_session is None or _exec_session.state not in ("stopped", "done"):
+        raise HTTPException(409, "执行未结束，不能回灌")
+    tree = store.get_analysis_tree(conn, req.analysis_id)
+    if tree is None:
+        raise HTTPException(404, "analysis not found")
+    l0 = next((l for l in tree["lanes"] if l["layer"] == "L0"), None)
+    if l0 is None:
+        raise HTTPException(404, "L0 泳道不存在")
+    take = store.create_take(conn, l0["id"])
+    marks = []
+    log = list(_exec_session.log)
+    used: set[int] = set()
+    for i, ev in enumerate(log):
+        if i in used:
+            continue
+        if ev["action"] == "down":
+            end = None
+            for j in range(i + 1, len(log)):
+                if j not in used and log[j]["action"] == "up" \
+                        and log[j]["key"] == ev["key"]:
+                    end = log[j]["t_ms"]
+                    used.add(j)
+                    break
+            marks.append(store.insert_mark(
+                conn, take["id"], t_ms=ev["t_ms"], end_ms=end, kind="input",
+                label=ev["key"], provenance="execution_log"))
+        elif ev["action"] == "tap":
+            marks.append(store.insert_mark(
+                conn, take["id"], t_ms=ev["t_ms"], kind="input",
+                label=ev["key"], provenance="execution_log"))
+        elif ev["action"] == "wheel":
+            marks.append(store.insert_mark(
+                conn, take["id"], t_ms=ev["t_ms"], kind="input",
+                label="Wheel", provenance="execution_log"))
+        elif ev["action"] == "up":
+            # 孤立 up（未被前面的 down 配对）→ release mark；release 不可携带
+            # label（store._validate_mark 强制），已配对的 up 已在上面被
+            # used 标记跳过，不会走到这支。
+            marks.append(store.insert_mark(
+                conn, take["id"], t_ms=ev["t_ms"], kind="release",
+                label=None, provenance="execution_log"))
+    take["marks"] = marks
+    return take
+
+
+@app.post("/api/exec/{cmd}")
+def exec_cmd(cmd: str):
+    if cmd not in ("pause", "resume", "stop", "step"):
+        raise HTTPException(400, "未知命令")
+    if _exec_session is None:
+        raise HTTPException(404, "没有执行会话")
+    try:
+        getattr(_exec_session, cmd)()
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except vd_host.HostError as e:
+        raise HTTPException(500, {"code": e.code, "hint": e.hint})
+    return _exec_session.status()
+
+
+@app.get("/api/exec/status")
+def exec_status():
+    if _exec_session is None:
+        return {"state": "idle"}
+    return _exec_session.status()
+
+
+@app.post("/api/capture/start")
+def capture_start():
+    cap_dir = data_root() / "captures"
+    cap_dir.mkdir(parents=True, exist_ok=True)
+    out = cap_dir / f"cap-{int(time.time())}.mp4"
+    try:
+        _exec_host.start_capture(str(out))
+    except vd_host.HostError as e:
+        raise HTTPException(500, {"code": e.code, "hint": e.hint})
+    return {"path": str(out)}
+
+
+@app.post("/api/capture/stop")
+def capture_stop(conn=Depends(get_conn)):
+    try:
+        path = _exec_host.stop_capture()
+    except vd_host.HostError as e:
+        raise HTTPException(500, {"code": e.code, "hint": e.hint})
+    v = store.create_video(conn, name=Path(path).stem, source_kind="upload",
+                           original_path=path)
+    ingest.process(v["id"])
+    return store.get_video(conn, v["id"])
