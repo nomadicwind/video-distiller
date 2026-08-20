@@ -1,6 +1,30 @@
 import pytest
 
 
+def _ready_video(client, sample_video):
+    with sample_video.open("rb") as f:
+        return client.post("/api/videos/upload",
+                           files={"file": ("s.mp4", f, "video/mp4")}).json()["id"]
+
+
+def test_video_file_supports_range(client, sample_video):
+    vid = _ready_video(client, sample_video)
+    r = client.get(f"/api/videos/{vid}/file")
+    assert r.status_code == 200
+    assert r.headers["accept-ranges"] == "bytes"
+    r206 = client.get(f"/api/videos/{vid}/file", headers={"Range": "bytes=0-99"})
+    assert r206.status_code == 206
+    assert len(r206.content) == 100
+    assert r206.headers["content-range"].startswith("bytes 0-99/")
+
+
+def test_sprite_served_as_jpeg(client, sample_video):
+    vid = _ready_video(client, sample_video)
+    r = client.get(f"/api/videos/{vid}/sprite")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/jpeg"
+
+
 def test_upload_runs_full_ingest_pipeline(client, sample_video):
     with sample_video.open("rb") as f:
         r = client.post("/api/videos/upload",

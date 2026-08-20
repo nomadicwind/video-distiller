@@ -1,6 +1,9 @@
+import re
 from pathlib import Path
+from typing import Iterator
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from vd import aggregate as agg, db, ingest, store
@@ -15,6 +18,56 @@ def get_conn():
         yield conn
     finally:
         conn.close()
+
+
+CHUNK = 1 << 20
+
+
+def _read_range(path: Path, start: int, end: int) -> Iterator[bytes]:
+    with path.open("rb") as f:
+        f.seek(start)
+        left = end - start + 1
+        while left > 0:
+            data = f.read(min(CHUNK, left))
+            if not data:
+                break
+            left -= len(data)
+            yield data
+
+
+@app.get("/api/videos/{video_id}/file")
+def video_file(video_id: str, request: Request, conn=Depends(get_conn)):
+    v = store.get_video(conn, video_id)
+    if v is None:
+        raise HTTPException(404)
+    path = Path(v["work_path"] or v["original_path"])
+    if not path.exists():
+        raise HTTPException(404)
+    size = path.stat().st_size
+    m = re.match(r"bytes=(\d*)-(\d*)", request.headers.get("range") or "")
+    if not m:
+        return StreamingResponse(
+            _read_range(path, 0, size - 1), media_type="video/mp4",
+            headers={"Accept-Ranges": "bytes", "Content-Length": str(size)},
+        )
+    start = int(m.group(1) or 0)
+    end = min(int(m.group(2) or size - 1), size - 1)
+    return StreamingResponse(
+        _read_range(path, start, end), status_code=206, media_type="video/mp4",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Content-Length": str(end - start + 1),
+        },
+    )
+
+
+@app.get("/api/videos/{video_id}/sprite")
+def sprite(video_id: str, conn=Depends(get_conn)):
+    p = data_root() / "thumbs" / f"{video_id}.jpg"
+    if not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/jpeg")
 
 
 @app.get("/api/videos")
