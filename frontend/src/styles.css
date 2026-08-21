@@ -139,6 +139,9 @@ canvas { display: block; }
 /* 小号弱化文字（表格内备注/版本号等次要信息） */
 .pb-muted { color: var(--text-3); font-size: 12px; }
 
+/* 循环表名称列：名称 + 重命名 icon 按钮（M6 任务 3） */
+.pb-name-cell { display: inline-flex; align-items: center; gap: 6px; }
+
 /* ---------- PlaybookEditor (spec §7: 双列 grid，编辑列 1fr + 预览列 480px sticky) ---------- */
 .pbe-page {
   max-width: 1400px;

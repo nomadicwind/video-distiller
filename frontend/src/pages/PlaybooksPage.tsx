@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pencil, Repeat, Workflow } from 'lucide-react'
 import { api } from '../api/client'
 import { isDegradedRotation } from '../api/degraded'
@@ -42,10 +42,21 @@ export function PlaybooksPage({ onBack, onEdit }: {
   void onBack // TopBar 导航已常驻，页内不再自带 ← 返回（spec §7）
   const [rotations, setRotations] = useState<Rotation[]>([])
   const [playbooks, setPlaybooks] = useState<Playbook[]>([])
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const cancelingRef = useRef(false)
+  const refreshRotations = () => api.listRotations().then(setRotations)
   useEffect(() => {
-    void api.listRotations().then(setRotations)
+    void refreshRotations()
     void api.listPlaybooks().then(setPlaybooks)
   }, [])
+
+  const saveRename = async (id: string, value: string) => {
+    const name = value.trim()
+    setEditingId(null)
+    if (!name) return
+    await api.patchRotation(id, { name })
+    await refreshRotations()
+  }
 
   return (
     <div className="page">
@@ -65,7 +76,30 @@ export function PlaybooksPage({ onBack, onEdit }: {
             <tbody>
               {rotations.map(r => (
                 <tr key={r.id}>
-                  <td>{r.name}</td>
+                  <td>
+                    {editingId === r.id ? (
+                      <input
+                        autoFocus
+                        defaultValue={r.name}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.currentTarget.blur() } else if (e.key === 'Escape') {
+                            cancelingRef.current = true
+                            setEditingId(null)
+                          }
+                        }}
+                        onBlur={e => {
+                          if (cancelingRef.current) { cancelingRef.current = false; return }
+                          void saveRename(r.id, e.currentTarget.value)
+                        }}
+                      />
+                    ) : (
+                      <span className="pb-name-cell">
+                        {r.name}
+                        <Button variant="icon" size="sm" tip="重命名" icon={<Pencil />}
+                          onClick={() => setEditingId(r.id)} />
+                      </span>
+                    )}
+                  </td>
                   <td className="pb-muted">
                     {isDegradedRotation(r) ? (
                       <Tooltip tip={r.note ?? ''} wrap>

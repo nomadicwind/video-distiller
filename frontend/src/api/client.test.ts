@@ -108,3 +108,15 @@ test('backfeedExec posts to exec backfeed endpoint', async () => {
   expect(init.method).toBe('POST')
   expect(JSON.parse(init.body)).toEqual({ analysis_id: 'an_1' })
 })
+
+test('patchRotation sends PATCH with name to rotation endpoint', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ id: 'rot_1', name: '新名字', note: null }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const r = await api.patchRotation('rot_1', { name: '新名字' })
+  expect(r.name).toBe('新名字')
+  const [url, init] = fetchMock.mock.calls[0]
+  expect(url).toBe('/api/rotations/rot_1')
+  expect(init.method).toBe('PATCH')
+  expect(JSON.parse(init.body)).toEqual({ name: '新名字' })
+})

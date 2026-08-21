@@ -78,6 +78,8 @@ export const api = {
   rejectProposal: (id: string) =>
     post(`/api/proposals/${id}/reject`).then(r => j<Proposal>(r)),
   listRotations: () => fetch('/api/rotations').then(r => j<Rotation[]>(r)),
+  patchRotation: (id: string, patch: { name?: string; clear_note?: boolean }) =>
+    fetch(`/api/rotations/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }).then(r => j<Rotation>(r)),
 
   listPlaybooks: () => fetch('/api/playbooks').then(r => j<Playbook[]>(r)),
   getPlaybook: (id: string) => fetch(`/api/playbooks/${id}`).then(r => j<Playbook>(r)),
