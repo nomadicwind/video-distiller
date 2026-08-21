@@ -32,6 +32,7 @@ export function InferPanel() {
   const [skills, setSkills] = useState<Skill[]>([])
   const [rotations, setRotations] = useState<Rotation[]>([])
   const [blockChecks, setBlockChecks] = useState<Record<string, boolean>>({})
+  const [busy, setBusy] = useState<null | 'align' | 'discover' | 'compose'>(null)
 
   useEffect(() => { void api.listSkills().then(setSkills) }, [])
   useEffect(() => { void api.listRotations().then(setRotations) }, [proposals.length])
@@ -66,15 +67,27 @@ export function InferPanel() {
   return (
     <div className="entry-panel">
       <div className="infer-toolbar">
-        <Button variant="ghost" icon={<AlignHorizontalDistributeCenter />}
-          onClick={() => void api.runInfer(analysis.id).then(setInfer)}>运行对齐</Button>
-        <Button variant="ghost" icon={<Repeat />}
+        <Button variant="ghost" icon={<AlignHorizontalDistributeCenter />} disabled={busy !== null}
           onClick={async () => {
-            const d = await api.runDiscover(analysis.id)
-            setDiscover(d); refreshProposals()
-          }}>发现循环</Button>
-        <Button variant="ghost" icon={<ListOrdered />}
-          onClick={async () => { await api.runCompose(analysis.id); refreshProposals() }}>编排方案</Button>
+            if (busy) return
+            setBusy('align')
+            try { await api.runInfer(analysis.id).then(setInfer) } finally { setBusy(null) }
+          }}>{busy === 'align' ? '运行中…' : '运行对齐'}</Button>
+        <Button variant="ghost" icon={<Repeat />} disabled={busy !== null}
+          onClick={async () => {
+            if (busy) return
+            setBusy('discover')
+            try {
+              const d = await api.runDiscover(analysis.id)
+              setDiscover(d); refreshProposals()
+            } finally { setBusy(null) }
+          }}>{busy === 'discover' ? '发现中…' : '发现循环'}</Button>
+        <Button variant="ghost" icon={<ListOrdered />} disabled={busy !== null}
+          onClick={async () => {
+            if (busy) return
+            setBusy('compose')
+            try { await api.runCompose(analysis.id); refreshProposals() } finally { setBusy(null) }
+          }}>{busy === 'compose' ? '编排中…' : '编排方案'}</Button>
       </div>
 
       {infer && (
