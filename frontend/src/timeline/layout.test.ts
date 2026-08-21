@@ -1,7 +1,7 @@
 import { describe, expect, it, test } from 'vitest'
 import {
-  checkboxRect, hitTestMark, holdingPatch, inRect, intervals,
-  msToPx, niceTickInterval, panned, pxToMs, snapMs, zoomed,
+  hitTestMark, holdingPatch, inRect, intervals,
+  msToPx, niceTickInterval, panned, pillRect, pxToMs, snapMs, zoomed,
   type MarkLite, type Viewport,
 } from './layout'
 
@@ -48,10 +48,13 @@ test('holdingPatch emits set or clear', () => {
   expect(holdingPatch(iv, false)).toEqual({ markId: 'a', patch: { clear_end: true } })
 })
 
-test('checkboxRect hit', () => {
-  const r = checkboxRect(250, v, 16)
-  expect(inRect(r, msToPx(v, 250), 16 + 64 / 2 + 15)).toBe(true)
-  expect(inRect(r, msToPx(v, 250) + 50, r.y + 5)).toBe(false)
+test('pillRect hit', () => {
+  const r = pillRect(250, v, 16)
+  // spec §6.2: 热区 ≥ 18×18 (was a 10×10 checkbox)
+  expect(r.w).toBeGreaterThanOrEqual(36)
+  expect(r.h).toBe(18)
+  expect(inRect(r, r.x + r.w / 2, r.y + r.h / 2)).toBe(true)
+  expect(inRect(r, r.x + r.w + 10, r.y)).toBe(false)
 })
 
 describe('niceTickInterval', () => {

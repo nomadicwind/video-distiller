@@ -4,7 +4,10 @@ import { toggleHolding } from '../actions'
 import { seekMs } from '../player/Player'
 import { useSession } from '../state/store'
 import { draw, timelineHeight } from './draw'
-import { checkboxRect, hitTestMark, holdingPatch, inRect, intervals, LANE_H, panned, pxToMs, TOP_H, zoomed } from './layout'
+import {
+  GUTTER_W, hitTestMark, holdingPatch, inRect, intervals, LANE_H, panned, pillRect, pxToMs,
+  RULER_H, zoomed,
+} from './layout'
 import type { Viewport } from './layout'
 
 export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggregate | null }) {
@@ -28,13 +31,14 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !s.analysis) return
-    const width = canvas.parentElement?.clientWidth ?? 800
-    const v = { ...viewport, widthPx: width }
+    const totalWidth = canvas.parentElement?.clientWidth ?? 800
+    const contentWidth = Math.max(0, totalWidth - GUTTER_W)
+    const v = { ...viewport, widthPx: contentWidth }
     const h = timelineHeight(s.analysis.lanes.length)
     const dpr = window.devicePixelRatio || 1
-    canvas.width = width * dpr
+    canvas.width = totalWidth * dpr
     canvas.height = h * dpr
-    canvas.style.width = `${width}px`
+    canvas.style.width = `${totalWidth}px`
     canvas.style.height = `${h}px`
     const ctx = canvas.getContext('2d')!
     ctx.scale(dpr, dpr)
@@ -47,20 +51,27 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
       tally: s.analysis.tally,
       aggregate,
       viewport: v,
+      hoverMs: null,
+      dragPreview: null,
+      snapOn: true,
     })
   })
 
-  const vp = (): Viewport =>
-    ({ ...viewport, widthPx: canvasRef.current?.parentElement?.clientWidth ?? 800 })
+  // Viewport.widthPx is track CONTENT width — the gutter (GUTTER_W) is
+  // rendered by draw.ts inside the same canvas but is not part of it.
+  const vp = (): Viewport => {
+    const totalWidth = canvasRef.current?.parentElement?.clientWidth ?? 800
+    return { ...viewport, widthPx: Math.max(0, totalWidth - GUTTER_W) }
+  }
 
   const onClick = (e: React.MouseEvent) => {
     const a = s.analysis
     const canvas = canvasRef.current
     if (!a || !canvas) return
     const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
     const yPos = e.clientY - rect.top
-    const laneIdx = Math.floor((yPos - TOP_H) / LANE_H)
+    const x = e.clientX - rect.left - GUTTER_W
+    const laneIdx = Math.floor((yPos - RULER_H) / LANE_H)
     const lane = a.lanes[laneIdx]
     if (!lane) return
     if (lane.id !== s.laneId) { s.selectLane(lane.id); return }
@@ -68,7 +79,7 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     if (!take) return
     const v = vp()
     for (const iv of intervals(take.marks)) {
-      if (inRect(checkboxRect(iv.midMs, v, TOP_H + laneIdx * LANE_H), x, yPos)) {
+      if (inRect(pillRect(iv.midMs, v, RULER_H + laneIdx * LANE_H), x, yPos)) {
         const { markId, patch } = holdingPatch(iv, !iv.holding)
         void toggleHolding(markId, patch)
         return
@@ -85,8 +96,9 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
   const onWheel = (e: React.WheelEvent) => {
     const v = vp()
     const rect = canvasRef.current!.getBoundingClientRect()
+    const x = e.clientX - rect.left - GUTTER_W
     if (e.ctrlKey || e.metaKey) {
-      setViewport(zoomed(v, e.deltaY > 0 ? 1.25 : 0.8, pxToMs(v, e.clientX - rect.left), durationMs))
+      setViewport(zoomed(v, e.deltaY > 0 ? 1.25 : 0.8, pxToMs(v, x), durationMs))
     } else {
       setViewport(panned(v, Math.round((e.deltaY + e.deltaX) * (v.endMs - v.startMs) / 1000), durationMs))
     }

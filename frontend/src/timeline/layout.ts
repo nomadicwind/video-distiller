@@ -2,8 +2,6 @@ export const GUTTER_W = 112
 export const RULER_H = 28
 export const LANE_H = 72
 export const TOOLBAR_H = 28
-/** @deprecated compat alias for RULER_H; kept until draw.ts/Timeline.tsx are rewritten (task 5) */
-export const TOP_H = RULER_H
 
 export interface Viewport { startMs: number; endMs: number; widthPx: number }
 
@@ -71,8 +69,33 @@ export const holdingPatch = (
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
-export const checkboxRect = (midMs: number, v: Viewport, laneY: number): Rect =>
-  ({ x: msToPx(v, midMs) - 5, y: laneY + LANE_H / 2 + 10, w: 10, h: 10 })
+/** Δ 药丸 sizing (spec §6.2: 热区 ≥ 18×18, replacing the old 10×10 checkbox). */
+const PILL_H = 18
+const PILL_MIN_W = 36
+/**
+ * Fixed width estimate for a typical "Δ123ms"-style mono-10px label. This is
+ * an estimate, not a text measurement — pillRect has no canvas context (and
+ * no label string) to measure against, so draw.ts's rendered pill and this
+ * hit-rect are only approximately the same width by design (spec: "宽 max(36,
+ * 文本宽度估算)").
+ */
+const PILL_W_ESTIMATE = 56
+/**
+ * Vertical offset of the pill's center BELOW the lane's vertical midline.
+ * The space above the midline is reserved for the mark's own label pill
+ * (spec §6.2: 8px above the dot) — stacking the Δ pill there too would
+ * collide with it, so the Δ pill instead sits in the free band between the
+ * marks row and the ghost-take ticks at the very bottom of the lane.
+ */
+const PILL_Y_OFFSET = 18
+
+/** Δ 药丸命中矩形（含渲染定位）：替代原 checkboxRect 的 10×10 复选框。 */
+export const pillRect = (midMs: number, v: Viewport, laneY: number): Rect => {
+  const w = Math.max(PILL_MIN_W, PILL_W_ESTIMATE)
+  const cx = msToPx(v, midMs)
+  const cy = laneY + LANE_H / 2 + PILL_Y_OFFSET
+  return { x: cx - w / 2, y: cy - PILL_H / 2, w, h: PILL_H }
+}
 
 export const inRect = (r: Rect, px: number, py: number): boolean =>
   px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h
