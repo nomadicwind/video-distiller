@@ -121,6 +121,83 @@ canvas { display: block; }
 .chord-group { display: inline-flex; align-items: center; gap: 4px; }
 .chord-sep { color: var(--text-3); font-size: 12px; }
 
+/* 小号弱化文字（表格内备注/版本号等次要信息） */
+.pb-muted { color: var(--text-3); font-size: 12px; }
+
+/* ---------- PlaybookEditor (spec §7: 双列 grid，编辑列 1fr + 预览列 480px sticky) ---------- */
+.pbe-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.pbe-title-row { display: flex; align-items: center; gap: 12px; }
+.pbe-title-row h1 { margin: 0; font-size: 18px; font-weight: 600; color: var(--text-1); flex: 1; min-width: 0; }
+
+.pbe-grid {
+  display: grid;
+  grid-template-columns: 1fr 480px;
+  gap: 16px;
+  align-items: start;
+}
+.pbe-sections { display: flex; flex-direction: column; gap: 16px; }
+.pbe-section-name {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 120px;
+  max-width: 320px;
+}
+.pbe-blocks { display: flex; flex-direction: column; gap: 6px; }
+.pbe-blocks + .pbe-add-row { margin-top: 10px; }
+
+/* 块行：类型徽章 + 控件 + ↑↓删 icon 按钮组（spec §7） */
+.pbe-block-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-s);
+}
+.pbe-block-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.pbe-block-controls input[type='number'] { width: 64px; }
+.pbe-block-pinned {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pbe-block-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-left: auto; }
+
+.pbe-add-row { display: flex; align-items: center; gap: 8px; }
+.pbe-editor-actions { display: flex; align-items: center; gap: 8px; }
+
+.pbe-versions-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* 预览列：sticky top，随左列滚动保持可见 */
+.pbe-preview-col { position: sticky; top: 16px; }
+.pbe-preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.preview {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-m);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+}
+
 /* ---------- Workbench (spec §5) ---------- */
 .topbar-context-name {
   color: var(--text-1);

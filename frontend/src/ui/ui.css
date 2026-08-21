@@ -241,6 +241,28 @@
 .badge-warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .badge-danger { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
 .badge-neutral { color: var(--text-2); background: color-mix(in srgb, var(--text-2) 14%, transparent); }
+/* 轨道色系徽章（spec §7 方案编辑器：技能块徽章走 L1 轨道色，与时间轴/EntryPanel 的技能轨同色相） */
+.badge-lane-l1 { color: var(--lane-l1); background: color-mix(in srgb, var(--lane-l1) 14%, transparent); }
+
+/* ---------- Export chip (spec §7: 循环/方案 行内导出链接) ---------- */
+.export-chips { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.export-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease;
+}
+.export-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.export-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ---------- Field ---------- */
 .field {
