@@ -1,15 +1,37 @@
 import { useCallback, useEffect, useState } from 'react'
+import { AlignHorizontalDistributeCenter, ListOrdered, Repeat } from 'lucide-react'
 import { api } from '../api/client'
 import type { Conflict, DiscoverResult, InferResult, Proposal, Rotation, Section, Skill } from '../api/types'
 import { seekMs } from '../player/Player'
 import { useSession } from '../state/store'
 import { fmtTc } from '../time/frames'
+import { Badge } from '../ui/Badge'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { Tooltip } from '../ui/Tooltip'
 
 const conflictText = (c: Conflict): string => {
   if (c.type === 'undefined_skill') return `目录缺定义：「${c.label}」`
   if (c.type === 'no_l0') return `「${c.label}」附近 500ms 内没有 L0 操作`
   return `三方冲突：L0 按键「${c.l0_key}」· L1「${c.l1_label}」· 键位期望 ${c.keymap_expected?.join('/')}`
 }
+
+const STATUS_BADGE: Record<Proposal['status'], 'accent' | 'success' | 'danger'> = {
+  pending: 'accent', accepted: 'success', rejected: 'danger',
+}
+const STATUS_LABEL: Record<Proposal['status'], string> = {
+  pending: '待裁决', accepted: '已接受', rejected: '已拒绝',
+}
+
+/**
+ * 错误降噪（修复清单 #8）：LLM 失败时后端把原始异常/拒绝文本塞进 payload.note
+ * （backend/src/vd/api.py 的 discover 与 compose 端点同构但字段名不同）——
+ * playbook 报告里有明确的 report.fallback；rotation 报告没有专门字段，但命名
+ * 失败时 name 必定回退为「未命名循环」，两者互斥且足够可靠地标出"这条 note
+ * 其实是错误串，别当正文渲染"。
+ */
+const isDegraded = (p: Proposal): boolean =>
+  p.kind === 'playbook' ? !!p.report.fallback : p.payload.name === '未命名循环'
 
 export function InferPanel() {
   const analysis = useSession(s => s.analysis)
@@ -52,92 +74,116 @@ export function InferPanel() {
 
   return (
     <div className="entry-panel">
-      <h3>推断</h3>
-      <p>
-        <button onClick={() => void api.runInfer(analysis.id).then(setInfer)}>运行对齐</button>
-        <button onClick={async () => {
-          const d = await api.runDiscover(analysis.id)
-          setDiscover(d); refreshProposals()
-        }}>发现循环</button>
-        <button onClick={async () => { await api.runCompose(analysis.id); refreshProposals() }}>编排方案</button>
-      </p>
+      <div className="infer-toolbar">
+        <Button variant="ghost" icon={<AlignHorizontalDistributeCenter />}
+          onClick={() => void api.runInfer(analysis.id).then(setInfer)}>运行对齐</Button>
+        <Button variant="ghost" icon={<Repeat />}
+          onClick={async () => {
+            const d = await api.runDiscover(analysis.id)
+            setDiscover(d); refreshProposals()
+          }}>发现循环</Button>
+        <Button variant="ghost" icon={<ListOrdered />}
+          onClick={async () => { await api.runCompose(analysis.id); refreshProposals() }}>编排方案</Button>
+      </div>
+
       {infer && (
-        <div>
-          <p>对齐 {infer.links.length} 条 · 补区间提议 {infer.span_proposals.length} 个</p>
-          {infer.conflicts.map((c, i) => (
-            <p key={i} style={{ color: '#f80', cursor: 'pointer' }}
-              onClick={() => seekMs(c.t_ms)}>
-              ⚠ [{fmtTc(c.t_ms)}] {conflictText(c)}
-            </p>
-          ))}
-          {infer.keymap_suggestions.map((s, i) => (
-            <p key={i} style={{ color: '#8cf' }}>
-              💡 反推：{names.get(s.skill_id) ?? s.skill_id} → 键「{s.key}」（{s.support}/{s.total} 次共现）
-            </p>
-          ))}
-        </div>
+        <Card title="对齐结果">
+          <div className="align-card">
+            <p className="align-summary">对齐 {infer.links.length} 条 · 补区间提议 {infer.span_proposals.length} 个</p>
+            {infer.conflicts.map((c, i) => (
+              <div key={i} className="align-conflict" onClick={() => seekMs(c.t_ms)}>
+                <span className="mono">{fmtTc(c.t_ms)}</span>
+                <span>{conflictText(c)}</span>
+              </div>
+            ))}
+            {infer.keymap_suggestions.map((s, i) => (
+              <p key={i} className="align-suggestion">
+                反推：{names.get(s.skill_id) ?? s.skill_id} → 键「{s.key}」（{s.support}/{s.total} 次共现）
+              </p>
+            ))}
+          </div>
+        </Card>
       )}
+
       {discover && (
-        <p style={{ color: '#888' }}>
+        <p className="align-unmatched">
           未匹配操作 {discover.unmatched} 个
           {discover.ambiguities.length > 0 && ` · 歧义 ${discover.ambiguities.length} 处（需人工裁决）`}
         </p>
       )}
-      {proposals.map(p => (
-        <div key={p.id} style={{ border: '1px solid #345', margin: '6px 0', padding: 6 }}>
-          <strong>{p.payload.name}</strong>
-          <span style={{ float: 'right' }}>
-            {p.status === 'pending' ? '待裁决' : p.status === 'accepted' ? '✅ 已接受' : '❌ 已拒绝'}
-          </span>
-          <p>{p.payload.note}</p>
-          {p.kind === 'rotation' ? (
-            <>
-              <p style={{ color: '#9c9' }}>
-                覆盖率 {(p.report.coverage! * 100).toFixed(0)}% ·
-                完整 {p.report.complete}/{p.report.iterations} 次迭代
-              </p>
-              <p style={{ color: '#aaa' }}>{bodyText(p)}</p>
-              {p.report.warnings?.map((w, i) => <p key={i} style={{ color: '#f80' }}>⚠ {w}</p>)}
-              {p.status === 'pending' && (
-                <p>
-                  <button onClick={async () => { await api.acceptProposal(p.id); refreshProposals() }}>接受</button>
-                  <button onClick={async () => { await api.rejectProposal(p.id); refreshProposals() }}>拒绝</button>
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              {(p.payload.sections ?? []).map((s, si) => (
-                <div key={si}>
-                  <strong>§ {s.name}</strong>
-                  {s.body.map((b, bi) => (
-                    <p key={bi}>
-                      <label>
-                        <input type="checkbox"
-                          checked={isChecked(blockKey(p.id, si, bi))}
-                          disabled={p.status !== 'pending'}
-                          onChange={e => setBlockChecks({
-                            ...blockChecks, [blockKey(p.id, si, bi)]: e.target.checked })} />
-                        {b.rotation ? `【循环】${rotName(b.rotation)}` : JSON.stringify(b)}
-                      </label>
-                    </p>
-                  ))}
+
+      <div className="proposal-list">
+        {proposals.map(p => {
+          const degraded = isDegraded(p)
+          return (
+            <Card key={p.id} title={p.payload.name}
+              extra={<Badge kind={STATUS_BADGE[p.status]}>{STATUS_LABEL[p.status]}</Badge>}>
+              {degraded ? (
+                <div className="proposal-degraded">
+                  <Tooltip tip={p.payload.note}>
+                    <Badge kind="warn">LLM 降级</Badge>
+                  </Tooltip>
                 </div>
-              ))}
-              {p.status === 'pending' && (
-                <p>
-                  <button
-                    disabled={adjudicated(p).length === 0}
-                    onClick={async () => { await api.acceptProposal(p.id, adjudicated(p)); refreshProposals() }}>
-                    接受勾选块
-                  </button>
-                  <button onClick={async () => { await api.rejectProposal(p.id); refreshProposals() }}>拒绝</button>
-                </p>
+              ) : p.payload.note ? (
+                <p className="proposal-note">{p.payload.note}</p>
+              ) : null}
+
+              {p.kind === 'rotation' ? (
+                <>
+                  <div className="proposal-coverage">
+                    <div className="progress-bar">
+                      <div className="progress-bar-fill"
+                        style={{ width: `${Math.round((p.report.coverage ?? 0) * 100)}%` }} />
+                    </div>
+                    <span className="mono proposal-coverage-label">
+                      完整 {p.report.complete}/{p.report.iterations} 次迭代
+                    </span>
+                  </div>
+                  <p className="proposal-body-chain">{bodyText(p)}</p>
+                  {p.report.warnings?.map((w, i) => <p key={i} className="proposal-warning">⚠ {w}</p>)}
+                  {p.status === 'pending' && (
+                    <div className="proposal-actions">
+                      <Button variant="primary"
+                        onClick={async () => { await api.acceptProposal(p.id); refreshProposals() }}>接受</Button>
+                      <Button variant="danger"
+                        onClick={async () => { await api.rejectProposal(p.id); refreshProposals() }}>拒绝</Button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {(p.payload.sections ?? []).map((s, si) => (
+                    <div key={si} className="proposal-section">
+                      <div className="proposal-section-title">§ {s.name}</div>
+                      {s.body.map((b, bi) => (
+                        <label key={bi} className="proposal-block-row">
+                          <input type="checkbox"
+                            checked={isChecked(blockKey(p.id, si, bi))}
+                            disabled={p.status !== 'pending'}
+                            onChange={e => setBlockChecks({
+                              ...blockChecks, [blockKey(p.id, si, bi)]: e.target.checked })} />
+                          <span>{b.rotation ? `【循环】${rotName(b.rotation)}` : JSON.stringify(b)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ))}
+                  {p.status === 'pending' && (
+                    <div className="proposal-actions">
+                      <Button variant="primary"
+                        disabled={adjudicated(p).length === 0}
+                        onClick={async () => { await api.acceptProposal(p.id, adjudicated(p)); refreshProposals() }}>
+                        接受勾选块
+                      </Button>
+                      <Button variant="danger"
+                        onClick={async () => { await api.rejectProposal(p.id); refreshProposals() }}>拒绝</Button>
+                    </div>
+                  )}
+                </>
               )}
-            </>
-          )}
-        </div>
-      ))}
+            </Card>
+          )
+        })}
+      </div>
     </div>
   )
 }

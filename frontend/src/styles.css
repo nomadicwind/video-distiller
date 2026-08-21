@@ -301,3 +301,62 @@ canvas { display: block; }
 
 /* canvas 自身横向可滚动（工具栏保持固定，不随之滚动）。 */
 .tl-canvas-wrap { min-width: 0; min-height: 0; overflow-x: auto; touch-action: none; }
+
+/* ---------- Inspector / InferPanel (spec §5.2/§7/§8-8) ---------- */
+.infer-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 对齐结果卡：冲突行 warn 左边条（点击跳转，语义不变），反推行素色 */
+.align-card { display: flex; flex-direction: column; gap: 6px; }
+.align-summary { margin: 0; color: var(--text-2); font-size: 12px; }
+.align-conflict {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  color: var(--text-1);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.align-conflict:hover { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.align-suggestion { margin: 0; color: var(--text-2); font-size: 12px; }
+.align-unmatched { margin: 0; color: var(--text-2); font-size: 12px; }
+
+/* 提案卡：覆盖率进度条 + 降噪后的 LLM 降级 Badge（原始错误串移入 tooltip） */
+.proposal-list { display: flex; flex-direction: column; gap: 10px; }
+.proposal-degraded { margin-bottom: 8px; }
+.proposal-note { margin: 0 0 8px; color: var(--text-2); font-size: 12px; }
+.proposal-coverage { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.proposal-coverage .progress-bar { flex: 1; }
+.proposal-coverage-label { flex-shrink: 0; color: var(--text-2); font-size: 11px; }
+.proposal-body-chain { margin: 0 0 8px; color: var(--text-2); font-size: 12px; }
+.proposal-warning { margin: 2px 0; color: var(--warn); font-size: 12px; }
+.proposal-actions { display: flex; gap: 8px; margin-top: 8px; }
+.proposal-section { margin-bottom: 8px; }
+.proposal-section-title { margin-bottom: 4px; color: var(--text-1); font-size: 12px; font-weight: 600; }
+.proposal-block-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 通用 4px 进度条（覆盖率等），success 填充 */
+.progress-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-control);
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--success);
+  border-radius: 999px;
+  transition: width 200ms ease;
+}
