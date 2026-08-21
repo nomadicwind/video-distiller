@@ -1,5 +1,9 @@
-export const LANE_H = 64
-export const TOP_H = 16
+export const GUTTER_W = 112
+export const RULER_H = 28
+export const LANE_H = 72
+export const TOOLBAR_H = 28
+/** @deprecated compat alias for RULER_H; kept until draw.ts/Timeline.tsx are rewritten (task 5) */
+export const TOP_H = RULER_H
 
 export interface Viewport { startMs: number; endMs: number; widthPx: number }
 
@@ -72,3 +76,52 @@ export const checkboxRect = (midMs: number, v: Viewport, laneY: number): Rect =>
 
 export const inRect = (r: Rect, px: number, py: number): boolean =>
   px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h
+
+const NICE_STEPS = [1, 2, 5]
+
+/**
+ * Picks a "nice" major tick interval (1-2-5 × 10^n series, n>=0) such that the
+ * resulting major-tick pixel spacing is at least 80px, choosing the smallest
+ * such interval. minorMs is always majorMs/5.
+ */
+export const niceTickInterval = (spanMs: number, widthPx: number): { majorMs: number; minorMs: number } => {
+  const threshold = (80 * spanMs) / widthPx
+  let majorMs = NICE_STEPS[0]
+  for (let exp = 0; ; exp++) {
+    const pow10 = 10 ** exp
+    let found = false
+    for (const step of NICE_STEPS) {
+      const candidate = step * pow10
+      if (candidate >= threshold) {
+        majorMs = candidate
+        found = true
+        break
+      }
+    }
+    if (found) break
+  }
+  return { majorMs, minorMs: majorMs / 5 }
+}
+
+/**
+ * Snaps a raw ms timestamp: first rounds to the nearest frame boundary
+ * (frame = 1000/fps), then — if any magnet (mark/keyframe timestamp) lies
+ * within tolPx pixels of that frame-rounded position — snaps to the magnet
+ * instead.
+ */
+export const snapMs = (
+  rawMs: number, fps: number, magnets: number[], v: Viewport, tolPx = 6,
+): number => {
+  const frame = 1000 / fps
+  const frameMs = Math.round(Math.round(rawMs / frame) * frame)
+  let best = frameMs
+  let bestDist = Infinity
+  for (const m of magnets) {
+    const dPx = Math.abs(msToPx(v, frameMs) - msToPx(v, m))
+    if (dPx <= tolPx && dPx < bestDist) {
+      bestDist = dPx
+      best = m
+    }
+  }
+  return best
+}

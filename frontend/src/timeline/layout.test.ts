@@ -1,7 +1,8 @@
-import { expect, test } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 import {
   checkboxRect, hitTestMark, holdingPatch, inRect, intervals,
-  msToPx, panned, pxToMs, zoomed, type MarkLite, type Viewport,
+  msToPx, niceTickInterval, panned, pxToMs, snapMs, zoomed,
+  type MarkLite, type Viewport,
 } from './layout'
 
 const v: Viewport = { startMs: 0, endMs: 10_000, widthPx: 1000 }
@@ -51,4 +52,32 @@ test('checkboxRect hit', () => {
   const r = checkboxRect(250, v, 16)
   expect(inRect(r, msToPx(v, 250), 16 + 64 / 2 + 15)).toBe(true)
   expect(inRect(r, msToPx(v, 250) + 50, r.y + 5)).toBe(false)
+})
+
+describe('niceTickInterval', () => {
+  it('picks 1-2-5 series with >=80px major spacing', () => {
+    expect(niceTickInterval(10_000, 800).majorMs).toBe(1000) // 1000ms→80px
+    expect(niceTickInterval(10_000, 400).majorMs).toBe(2000)
+    expect(niceTickInterval(60_000, 800).majorMs).toBe(10_000)
+    expect(niceTickInterval(1_000, 800).majorMs).toBe(100)
+  })
+  it('minor is major/5', () => {
+    expect(niceTickInterval(10_000, 800).minorMs).toBe(200)
+  })
+})
+
+describe('snapMs', () => {
+  const v2 = { startMs: 0, endMs: 10_000, widthPx: 1000 } // 1px = 10ms
+  it('rounds to frame first', () => {
+    // 30fps: frame=1000/30=33.333...; 517/33.333=15.51 -> round 16 -> 16*33.333=533.333 -> round 533
+    expect(snapMs(517, 30, [], v2)).toBe(533)
+  })
+  it('magnet wins within tolerance', () => {
+    // frame-rounded 1230 -> 1233; |1233-1200|=33ms=3.3px <= 6px tol
+    expect(snapMs(1230, 30, [1200], v2)).toBe(1200)
+  })
+  it('magnet ignored outside tolerance', () => {
+    // frame-rounded 1300 -> 1300 (exact); |1300-1200|=100ms=10px > 6px tol
+    expect(snapMs(1300, 30, [1200], v2)).not.toBe(1200)
+  })
 })
