@@ -309,6 +309,16 @@ def _make_playbook(client, analysis):
     return rot, pb
 
 
+def test_rotation_rename_roundtrip(client, analysis):
+    rot, _pb = _make_playbook(client, analysis)
+    r = client.patch(f"/api/rotations/{rot['id']}", json={"name": "新名字"})
+    assert r.status_code == 200 and r.json()["name"] == "新名字"
+    assert client.patch("/api/rotations/nope", json={"name": "x"}).status_code == 404
+    assert client.patch(f"/api/rotations/{rot['id']}", json={"name": "  "}).status_code == 400
+    r2 = client.patch(f"/api/rotations/{rot['id']}", json={"clear_note": True})
+    assert r2.json()["note"] is None
+
+
 def test_export_routes(client, analysis):
     rot, pb = _make_playbook(client, analysis)
     md = client.get(f"/api/playbooks/{pb['id']}/export.md")

@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 KEYMAP_DEFAULT = "km-default-v1"
 LAYERS = ("L0", "L1", "L2")
 
+# Sentinel for "not passed" in optional parameters
+_UNSET = object()
+
 
 def _id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:12]}"
@@ -478,3 +481,40 @@ def rollback_playbook(conn, playbook_id, version):
 def get_rotation(conn, rotation_id):
     return _rotation_row(conn.execute(
         "SELECT * FROM rotations WHERE id=?", (rotation_id,)).fetchone())
+
+
+def update_rotation(conn, rotation_id, *, name=None, note=_UNSET):
+    """Update rotation name and/or note.
+
+    Args:
+        conn: Database connection
+        rotation_id: ID of rotation to update
+        name: None=不改；str 去空白后须非空否则 ValueError
+        note: 未传=不改；传 None=清空；传 str=更新（哨兵用 _UNSET）
+
+    Returns:
+        Updated rotation dict; None if rotation doesn't exist
+    """
+    rot = get_rotation(conn, rotation_id)
+    if rot is None:
+        return None
+
+    updates = {}
+    if name is not None:
+        name_stripped = name.strip()
+        if not name_stripped:
+            raise ValueError("name cannot be blank")
+        updates["name"] = name_stripped
+
+    if note is not _UNSET:
+        updates["note"] = note
+
+    if updates:
+        keys = ",".join(f"{k}=?" for k in updates)
+        conn.execute(
+            f"UPDATE rotations SET {keys} WHERE id=?",
+            (*updates.values(), rotation_id)
+        )
+        conn.commit()
+
+    return get_rotation(conn, rotation_id)

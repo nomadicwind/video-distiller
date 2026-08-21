@@ -400,6 +400,30 @@ def rotations(conn=Depends(get_conn)):
     return store.list_rotations(conn)
 
 
+class RotationPatch(BaseModel):
+    name: str | None = None
+    note: str | None = None
+    clear_note: bool = False
+
+
+@app.patch("/api/rotations/{rotation_id}")
+def update_rotation(rotation_id: str, req: RotationPatch, conn=Depends(get_conn)):
+    try:
+        # Determine note value: clear_note=True → None, else note value if provided
+        note_value = store._UNSET
+        if req.clear_note:
+            note_value = None
+        elif req.note is not None:
+            note_value = req.note
+
+        rot = store.update_rotation(conn, rotation_id, name=req.name, note=note_value)
+        if rot is None:
+            raise HTTPException(404)
+        return rot
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 def _agent_client():
     """真实运行返回 None（agent 自建客户端）；测试 monkeypatch 注入 fake。"""
     return None
