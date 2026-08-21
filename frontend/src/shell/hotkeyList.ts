@@ -27,6 +27,11 @@ export const HOTKEYS: HotkeyRow[] = [
   { keys: ['A'], label: '聚合' },
   { keys: ['S'], label: '吸附' },
   { keys: ['Home'], label: '跳开头' },
+  // M7 任务 2：A-B 区间循环 + 试听。
+  { keys: ['I'], label: '设入点 A（同点再按清除）' },
+  { keys: ['O'], label: '设出点 B（同点再按清除）' },
+  { keys: ['L', 'Shift + L'], label: '循环 A-B ／ 清空循环' },
+  { keys: ['P'], label: '试听所选标记' },
   // 滚轮平移/缩放发现性修复（M5 复查修复 #4）：Timeline.onWheel 早已支持，
   // 只是浮层和工具栏提示都没写出来。
   { keys: ['滚轮'], label: '平移时间轴' },

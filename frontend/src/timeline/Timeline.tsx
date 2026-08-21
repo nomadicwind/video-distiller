@@ -3,6 +3,7 @@ import type { Aggregate, Tally, Video } from '../api/types'
 import { moveMark, toggleHolding } from '../actions'
 import { seekMs } from '../player/Player'
 import { useSession } from '../state/store'
+import { clampMs, frameRound } from '../time/frames'
 import { Toolbar } from './Toolbar'
 import { draw, timelineHeight, type DragPreview } from './draw'
 import {
@@ -10,13 +11,6 @@ import {
   RULER_H, snapMs, zoomed,
 } from './layout'
 import type { MarkLite, Viewport } from './layout'
-
-const frameRound = (ms: number, fps: number): number => {
-  const frame = 1000 / fps
-  return Math.round(ms / frame) * frame
-}
-
-const clampMs = (ms: number, durationMs: number): number => Math.max(0, Math.min(ms, durationMs))
 
 /**
  * Magnets a dragged mark can snap to (spec §6.3: "吸附开时对打表 marker/相邻
@@ -159,6 +153,7 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
         dragPreview,
         snapOn: s.snapOn,
         scrubbing,
+        abLoop: s.abLoop,
       })
     })
     return () => cancelAnimationFrame(raf)

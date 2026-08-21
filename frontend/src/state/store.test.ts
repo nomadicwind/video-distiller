@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import type { AnalysisTree, Mark } from '../api/types'
 import { currentTake, useSession } from './store'
 
@@ -93,3 +93,77 @@ test('clearAnalysis resets the session window to its empty state', () => {
   expect(after.playheadMs).toBe(0)
   expect(after.showAggregate).toBe(false)
 })
+
+test('setLoopA/setLoopB set independent endpoints', () => {
+  const s = useSession.getState()
+  s.setLoopA(1000)
+  s.setLoopB(3000)
+  expect(useSession.getState().abLoop).toEqual({ aMs: 1000, bMs: 3000, on: false })
+})
+
+test('toggleLoop only takes effect once both endpoints are set', () => {
+  const s = useSession.getState()
+  s.setLoopA(1000)
+  s.toggleLoop()
+  expect(useSession.getState().abLoop.on).toBe(false) // guarded: bMs still null
+  s.setLoopB(3000)
+  s.toggleLoop()
+  expect(useSession.getState().abLoop.on).toBe(true)
+  s.toggleLoop()
+  expect(useSession.getState().abLoop.on).toBe(false)
+})
+
+test('clearLoop resets both endpoints and the switch', () => {
+  const s = useSession.getState()
+  s.setLoopA(1000)
+  s.setLoopB(3000)
+  s.toggleLoop()
+  s.clearLoop()
+  expect(useSession.getState().abLoop).toEqual({ aMs: null, bMs: null, on: false })
+})
+
+test('setAnalysis and clearAnalysis both reset an in-progress A-B loop', () => {
+  const s = useSession.getState()
+  s.setLoopA(1000)
+  s.setLoopB(3000)
+  s.clearAnalysis()
+  expect(useSession.getState().abLoop).toEqual({ aMs: null, bMs: null, on: false })
+
+  s.setLoopA(1000)
+  s.setLoopB(3000)
+  s.setAnalysis(structuredClone(tree))
+  expect(useSession.getState().abLoop).toEqual({ aMs: null, bMs: null, on: false })
+})
+
+test('setHintText sets the transient hint and auto-clears it after 3s', () => {
+  vi.useFakeTimers()
+  try {
+    const s = useSession.getState()
+    s.setHintText('出点须在入点之后')
+    expect(useSession.getState().hintText).toBe('出点须在入点之后')
+    vi.advanceTimersByTime(2999)
+    expect(useSession.getState().hintText).toBe('出点须在入点之后')
+    vi.advanceTimersByTime(1)
+    expect(useSession.getState().hintText).toBeNull()
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('setHintText restarts the 3s countdown when called again before it elapses', () => {
+  vi.useFakeTimers()
+  try {
+    const s = useSession.getState()
+    s.setHintText('first')
+    vi.advanceTimersByTime(2000)
+    s.setHintText('second')
+    vi.advanceTimersByTime(2000)
+    expect(useSession.getState().hintText).toBe('second') // first's timer must not fire early
+    vi.advanceTimersByTime(1000)
+    expect(useSession.getState().hintText).toBeNull()
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+afterEach(() => useSession.getState().setHintText(null))

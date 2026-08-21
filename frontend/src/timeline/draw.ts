@@ -1,4 +1,5 @@
 import type { Aggregate, Lane, Mark, Tally } from '../api/types'
+import type { AbLoop } from '../state/store'
 import { fmtTc } from '../time/frames'
 import { tlTheme, withAlpha, type TlTheme } from './theme'
 import {
@@ -30,6 +31,8 @@ export interface TimelineData {
    * 现由 Timeline.tsx 提供的这个专用信号接管。
    */
   scrubbing: boolean
+  /** A-B 循环入/出点（M7 任务 2）：入/出点各自独立显示角标，区带需两者都设置。 */
+  abLoop: AbLoop
 }
 
 export function timelineHeight(laneCount: number): number {
@@ -170,6 +173,15 @@ export function draw(ctx: CanvasRenderingContext2D, d: TimelineData): void {
   ctx.beginPath()
   ctx.rect(GUTTER_W, 0, v.widthPx, height)
   ctx.clip()
+
+  // A-B 循环区带（M7 任务 2）：入/出点都设置时，用 8% accent 浅色打底提示
+  // 循环范围，铺满整个轨道高度；早于聚合/标记等内容层绘制，只当底色。
+  if (d.abLoop.aMs != null && d.abLoop.bMs != null) {
+    const x1 = GUTTER_W + msToPx(v, d.abLoop.aMs)
+    const x2 = GUTTER_W + msToPx(v, d.abLoop.bMs)
+    ctx.fillStyle = withAlpha(theme.accent, 0.08)
+    ctx.fillRect(Math.min(x1, x2), 0, Math.abs(x2 - x1), height)
+  }
 
   d.lanes.forEach((lane, i) => {
     const laneY = RULER_H + i * LANE_H
@@ -387,6 +399,29 @@ export function draw(ctx: CanvasRenderingContext2D, d: TimelineData): void {
   ctx.moveTo(0, hair(RULER_H))
   ctx.lineTo(totalW, hair(RULER_H))
   ctx.stroke()
+
+  // ---- 8.5. A-B 循环入/出点角标（M7 任务 2）：标尺下沿的 accent 小旗，
+  // 各自独立显示（不要求两点都设，见 abLoop 的字段注释）；裁剪到标尺区，
+  // 避免出视口时溢出到轨道内容或沟槽列。 ----
+  if (d.abLoop.aMs != null || d.abLoop.bMs != null) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(GUTTER_W, 0, v.widthPx, RULER_H)
+    ctx.clip()
+    ctx.fillStyle = theme.accent
+    const drawFlag = (tMs: number) => {
+      const x = GUTTER_W + msToPx(v, tMs)
+      ctx.beginPath()
+      ctx.moveTo(x - 5, RULER_H)
+      ctx.lineTo(x + 5, RULER_H)
+      ctx.lineTo(x, RULER_H - 7)
+      ctx.closePath()
+      ctx.fill()
+    }
+    if (d.abLoop.aMs != null) drawFlag(d.abLoop.aMs)
+    if (d.abLoop.bMs != null) drawFlag(d.abLoop.bMs)
+    ctx.restore()
+  }
 
   // ---- 9. 播放头：全高白线 + 标尺内三角手柄 + 时码气泡（悬停/拖动时） ----
   const phX = GUTTER_W + msToPx(v, d.playheadMs)

@@ -2,6 +2,15 @@ import { create } from 'zustand'
 import type { AnalysisTree, Mark, Take, Tally } from '../api/types'
 import { clearUndoHistory } from './undo'
 
+/** A-B 循环入/出点（M7 任务 2）：均为 null 时不生效；`on` 仅在两者都设置时才有意义（见 toggleLoop）。 */
+export interface AbLoop {
+  aMs: number | null
+  bMs: number | null
+  on: boolean
+}
+
+const emptyAbLoop = (): AbLoop => ({ aMs: null, bMs: null, on: false })
+
 export interface Session {
   analysis: AnalysisTree | null
   laneId: string | null
@@ -14,6 +23,10 @@ export interface Session {
   snapOn: boolean
   /** ? 快捷键浮层开关位（浮层本身在任务 12 实现）。 */
   showHotkeys: boolean
+  /** A-B 循环入/出点 + 开关（M7 任务 2）— Player 的播放头更新流据此回跳，Timeline 据此画区带。 */
+  abLoop: AbLoop
+  /** StatusBar 左侧的一次性短提示（M7 任务 2，如"出点须在入点之后"）；3s 后自动清空，无需专门的 toast 组件。 */
+  hintText: string | null
 
   setAnalysis: (a: AnalysisTree) => void
   clearAnalysis: () => void
@@ -31,6 +44,11 @@ export interface Session {
   toggleAggregate: () => void
   toggleSnap: () => void
   toggleHotkeys: () => void
+  setLoopA: (ms: number | null) => void
+  setLoopB: (ms: number | null) => void
+  toggleLoop: () => void
+  clearLoop: () => void
+  setHintText: (text: string | null) => void
 }
 
 const mapMarks = (a: AnalysisTree, takeId: string, f: (marks: Mark[]) => Mark[]): AnalysisTree => ({
@@ -44,10 +62,14 @@ const mapMarks = (a: AnalysisTree, takeId: string, f: (marks: Mark[]) => Mark[])
 const byT = <T extends { t_ms: number }>(xs: T[]): T[] =>
   [...xs].sort((a, b) => a.t_ms - b.t_ms)
 
+/** Module-level so it survives across store actions without leaking into React re-render state; mirrors clearUndoHistory's non-store bookkeeping in ./undo. */
+let hintTimer: ReturnType<typeof setTimeout> | null = null
+
 export const useSession = create<Session>((set, get) => ({
   analysis: null, laneId: null, takeId: null, selectedMarkId: null,
   playheadMs: 0, entryMode: false, showAggregate: false,
   snapOn: true, showHotkeys: false,
+  abLoop: emptyAbLoop(), hintText: null,
 
   setAnalysis: a => {
     const lane = a.lanes[0] ?? null
@@ -56,7 +78,12 @@ export const useSession = create<Session>((set, get) => ({
     // any undo/redo history from before this belongs to marks/takes that
     // don't exist in the new tree, so it must not survive the switch.
     clearUndoHistory()
-    set({ analysis: a, laneId: lane?.id ?? null, takeId: take?.id ?? null, selectedMarkId: null })
+    set({
+      analysis: a, laneId: lane?.id ?? null, takeId: take?.id ?? null, selectedMarkId: null,
+      // A-B loop marks are per-video too — carrying them into a different
+      // analysis would loop/audition around timestamps that mean nothing there.
+      abLoop: emptyAbLoop(),
+    })
   },
   // Clears the per-video session window. `entryMode` is intentionally left
   // untouched — it's a persistent UI preference, not video-scoped state, so
@@ -65,7 +92,7 @@ export const useSession = create<Session>((set, get) => ({
     clearUndoHistory()
     set({
       analysis: null, laneId: null, takeId: null, selectedMarkId: null,
-      playheadMs: 0, showAggregate: false,
+      playheadMs: 0, showAggregate: false, abLoop: emptyAbLoop(),
     })
   },
   selectLane: laneId => {
@@ -116,6 +143,23 @@ export const useSession = create<Session>((set, get) => ({
   toggleAggregate: () => set(s => ({ showAggregate: !s.showAggregate })),
   toggleSnap: () => set(s => ({ snapOn: !s.snapOn })),
   toggleHotkeys: () => set(s => ({ showHotkeys: !s.showHotkeys })),
+  setLoopA: ms => set(s => ({ abLoop: { ...s.abLoop, aMs: ms } })),
+  setLoopB: ms => set(s => ({ abLoop: { ...s.abLoop, bMs: ms } })),
+  // Only meaningful once both endpoints exist — a stray `on: true` with a
+  // null endpoint would make Player's loop-check compare against null.
+  toggleLoop: () => set(s => (
+    s.abLoop.aMs != null && s.abLoop.bMs != null
+      ? { abLoop: { ...s.abLoop, on: !s.abLoop.on } }
+      : {}
+  )),
+  clearLoop: () => set({ abLoop: emptyAbLoop() }),
+  setHintText: text => {
+    if (hintTimer) { clearTimeout(hintTimer); hintTimer = null }
+    set({ hintText: text })
+    if (text !== null) {
+      hintTimer = setTimeout(() => { hintTimer = null; set({ hintText: null }) }, 3000)
+    }
+  },
 }))
 
 export const currentTake = (s: Session): Take | null => {

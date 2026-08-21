@@ -98,6 +98,7 @@ function Workbench({ video }: { video: Video }) {
   const [aggregate, setAggregate] = useState<Aggregate | null>(null)
   const showAggregate = useSession(st => st.showAggregate)
   const laneId = useSession(st => st.laneId)
+  const hintText = useSession(st => st.hintText)
   useHotkeys(video)
 
   useEffect(() => {
@@ -141,7 +142,10 @@ function Workbench({ video }: { video: Video }) {
         </div>
       </div>
       <StatusBar
-        left={entryMode ? '录入模式 · 敲键即打点' : '点击时间轴定位 · 键帽或录入模式打点'}
+        // hintText（M7 任务 2 的一次性提示，如"出点须在入点之后"）复用这个
+        // 左侧提示位而不是新开一个组件；有值时临时顶掉常态的模式提示，3s
+        // 后 store 自动清空，届时这里会退回常态文案。
+        left={hintText ?? (entryMode ? '录入模式 · 敲键即打点' : '点击时间轴定位 · 键帽或录入模式打点')}
         right={<span>{fps} fps · {fmtTc(durationMs)}</span>}
       />
     </div>

@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
 import { deleteSelected, insertAtPlayhead, nudgeSelected, tallyAtPlayhead } from './actions'
 import type { Video } from './api/types'
-import { frameStep, seekMs, videoEl } from './player/Player'
-import { useSession } from './state/store'
+import { auditionMark, frameStep, seekMs, togglePlay } from './player/Player'
+import { currentTake, useSession } from './state/store'
 import { redo, undo } from './state/undo'
+import { clampMs, frameRound } from './time/frames'
 
 /**
  * Only genuine text-entry targets swallow single-key hotkeys entirely
@@ -52,8 +53,7 @@ export function useHotkeys(video: Video): void {
       }
       if (e.key === ' ') {
         e.preventDefault()
-        const v = videoEl()
-        if (v) v.paused ? void v.play() : v.pause()
+        togglePlay()
       } else if (e.key === '[') {
         frameStep(-1, fps, durationMs)
       } else if (e.key === ']') {
@@ -76,6 +76,34 @@ export function useHotkeys(video: Video): void {
         // 浏览器默认把 Home 当作"滚动到页面顶部"处理，需要显式拦截。
         e.preventDefault()
         seekMs(0)
+      } else if (e.key === 'i' || e.key === 'I') {
+        // e.repeat guard (here and in the O/L/P branches below): I/O/L/P are
+        // one-shot toggles/actions, not something that should spam-fire while
+        // the key is held down (autorepeat), unlike frame-step's [ / ].
+        if (e.repeat) return
+        const rounded = clampMs(frameRound(st.playheadMs, fps), durationMs)
+        // 同点再按清除（brief §要点）：新值等于已设值则视为"取消"。
+        st.setLoopA(st.abLoop.aMs === rounded ? null : rounded)
+      } else if (e.key === 'o' || e.key === 'O') {
+        if (e.repeat) return
+        const rounded = clampMs(frameRound(st.playheadMs, fps), durationMs)
+        if (st.abLoop.bMs === rounded) {
+          st.setLoopB(null)
+        } else if (st.abLoop.aMs != null && rounded <= st.abLoop.aMs) {
+          // b<=a 无效：忽略设置，复用 StatusBar 左侧提示位给出瞬时反馈。
+          st.setHintText('出点须在入点之后')
+        } else {
+          st.setLoopB(rounded)
+        }
+      } else if (e.key.toLowerCase() === 'l') {
+        if (e.repeat) return
+        if (e.shiftKey) st.clearLoop()
+        else st.toggleLoop()
+      } else if (e.key === 'p' || e.key === 'P') {
+        if (e.repeat) return
+        const take = currentTake(st)
+        const mark = take?.marks.find(m => m.id === st.selectedMarkId)
+        if (mark) auditionMark(mark.t_ms, durationMs)
       }
       // '?' 打开快捷键浮层由 shell/HotkeyOverlay.tsx 自带的全局监听处理——
       // 该浮层不受 Workbench 挂载与否影响（资料库页也要能打开），若这里也

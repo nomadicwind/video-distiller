@@ -8,7 +8,7 @@ import { fmtTc } from '../time/frames'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Field } from '../ui/Field'
-import { frameStep, seekMs, videoEl } from './Player'
+import { frameStep, seekMs, togglePlay, videoEl } from './Player'
 
 const RATES = [0.25, 0.5, 1, 2] as const
 type BackfillField = 'anim_ms' | 'cast_ms' | 'cd_ms'
@@ -130,12 +130,6 @@ export function Transport({ video }: { video: Video }): JSX.Element {
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [tallyOpen])
-
-  const togglePlay = () => {
-    const v = videoEl()
-    if (!v) return
-    v.paused ? void v.play() : v.pause()
-  }
 
   const clearTally = async () => {
     if (!s.analysis) return
