@@ -57,6 +57,39 @@ test('pillRect hit', () => {
   expect(inRect(r, r.x + r.w + 10, r.y)).toBe(false)
 })
 
+test('pillRect spanPx clamps width so adjacent short intervals do not overlap (code review)', () => {
+  // Two adjacent short intervals: a-b (100ms wide) and b-c (300ms wide).
+  // Without the spanPx clamp, both pills default to a fixed 56px width and
+  // heavily overlap here — the reviewer's live repro clicked at one
+  // interval's own midpoint and had it PATCH the neighboring interval's mark
+  // instead, because the earlier (in array order) interval's oversized rect
+  // still contained that point.
+  const marks = [mk('a', 1000), mk('b', 1100), mk('c', 1400)]
+  const [ivAB, ivBC] = intervals(marks)
+  const spanAB = msToPx(v, ivAB.endMs) - msToPx(v, ivAB.startMs)
+  const spanBC = msToPx(v, ivBC.endMs) - msToPx(v, ivBC.startMs)
+  const rAB = pillRect(ivAB.midMs, v, 16, spanAB)
+  const rBC = pillRect(ivBC.midMs, v, 16, spanBC)
+
+  // The two hit-rects must not overlap at all.
+  expect(rAB.x + rAB.w).toBeLessThanOrEqual(rBC.x)
+
+  // Clicking at bc's own midpoint hits ONLY bc, not ab.
+  const bcMidPx = msToPx(v, ivBC.midMs)
+  expect(inRect(rBC, bcMidPx, rBC.y + rBC.h / 2)).toBe(true)
+  expect(inRect(rAB, bcMidPx, rAB.y + rAB.h / 2)).toBe(false)
+
+  // And clicking at ab's own midpoint hits ONLY ab, not bc.
+  const abMidPx = msToPx(v, ivAB.midMs)
+  expect(inRect(rAB, abMidPx, rAB.y + rAB.h / 2)).toBe(true)
+  expect(inRect(rBC, abMidPx, rBC.y + rBC.h / 2)).toBe(false)
+})
+
+test('pillRect spanPx floors width at 12px for very tight intervals', () => {
+  const r = pillRect(1000, v, 16, 2) // spanPx=2 → 2-4=-2 → floored to 12
+  expect(r.w).toBe(12)
+})
+
 describe('niceTickInterval', () => {
   it('picks 1-2-5 series with >=80px major spacing', () => {
     expect(niceTickInterval(10_000, 800).majorMs).toBe(1000) // 1000ms→80px

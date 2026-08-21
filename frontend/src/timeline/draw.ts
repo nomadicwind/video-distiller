@@ -214,7 +214,8 @@ export function draw(ctx: CanvasRenderingContext2D, d: TimelineData): void {
           ctx.fill()
         }
 
-        const rect = pillRect(iv.midMs, v, laneY)
+        const spanPx = msToPx(v, iv.endMs) - msToPx(v, iv.startMs)
+        const rect = pillRect(iv.midMs, v, laneY, spanPx)
         const px0 = GUTTER_W + rect.x
         ctx.fillStyle = holding ? withAlpha(color, 0.28) : theme.bgElevated
         roundRectPath(ctx, px0, rect.y, rect.w, rect.h, rect.h / 2)

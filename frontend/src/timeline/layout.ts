@@ -71,7 +71,6 @@ export interface Rect { x: number; y: number; w: number; h: number }
 
 /** Δ 药丸 sizing (spec §6.2: 热区 ≥ 18×18, replacing the old 10×10 checkbox). */
 const PILL_H = 18
-const PILL_MIN_W = 36
 /**
  * Fixed width estimate for a typical "Δ123ms"-style mono-10px label. This is
  * an estimate, not a text measurement — pillRect has no canvas context (and
@@ -81,6 +80,12 @@ const PILL_MIN_W = 36
  */
 const PILL_W_ESTIMATE = 56
 /**
+ * Floor applied to the width when a `spanPx` constraint is given (a very
+ * tight pair of marks would otherwise force the pill narrower than this is
+ * usable as a click target — code review ruling, see pillRect below).
+ */
+const PILL_W_SPAN_FLOOR = 12
+/**
  * Vertical offset of the pill's center BELOW the lane's vertical midline.
  * The space above the midline is reserved for the mark's own label pill
  * (spec §6.2: 8px above the dot) — stacking the Δ pill there too would
@@ -89,9 +94,22 @@ const PILL_W_ESTIMATE = 56
  */
 const PILL_Y_OFFSET = 18
 
-/** Δ 药丸命中矩形（含渲染定位）：替代原 checkboxRect 的 10×10 复选框。 */
-export const pillRect = (midMs: number, v: Viewport, laneY: number): Rect => {
-  const w = Math.max(PILL_MIN_W, PILL_W_ESTIMATE)
+/**
+ * Δ 药丸命中矩形（含渲染定位）：替代原 checkboxRect 的 10×10 复选框。
+ *
+ * `spanPx` (optional) is the interval's own on-screen width (endMs-startMs
+ * in px) — when given, the pill's width is capped to `spanPx - 4` (floored
+ * at PILL_W_SPAN_FLOOR) so two tightly-adjacent intervals' hit-rects can
+ * never overlap into each other (code review: a fixed 56px pill was wide
+ * enough to reach into a neighboring interval and steal its click, or — for
+ * a 0ms-delta pair sharing an x — to sit exactly on top of a mark's own
+ * hit-test). Omitted (e.g. the layout.test.ts unit test), it falls back to
+ * the plain PILL_W_ESTIMATE, unconstrained.
+ */
+export const pillRect = (midMs: number, v: Viewport, laneY: number, spanPx?: number): Rect => {
+  const w = spanPx === undefined
+    ? PILL_W_ESTIMATE
+    : Math.min(PILL_W_ESTIMATE, Math.max(PILL_W_SPAN_FLOOR, spanPx - 4))
   const cx = msToPx(v, midMs)
   const cy = laneY + LANE_H / 2 + PILL_Y_OFFSET
   return { x: cx - w / 2, y: cy - PILL_H / 2, w, h: PILL_H }

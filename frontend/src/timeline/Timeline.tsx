@@ -6,10 +6,10 @@ import { useSession } from '../state/store'
 import { Toolbar } from './Toolbar'
 import { draw, timelineHeight, type DragPreview } from './draw'
 import {
-  GUTTER_W, hitTestMark, holdingPatch, inRect, intervals, LANE_H, panned, pillRect, pxToMs,
+  GUTTER_W, hitTestMark, holdingPatch, inRect, intervals, LANE_H, msToPx, panned, pillRect, pxToMs,
   RULER_H, snapMs, zoomed,
 } from './layout'
-import type { Viewport } from './layout'
+import type { MarkLite, Viewport } from './layout'
 
 const frameRound = (ms: number, fps: number): number => {
   const frame = 1000 / fps
@@ -31,6 +31,21 @@ function magnetsFor(marks: { id: string; t_ms: number }[], markId: string, tally
   if (idx > 0) magnets.push(marks[idx - 1].t_ms)
   if (idx + 1 < marks.length) magnets.push(marks[idx + 1].t_ms)
   return magnets
+}
+
+/**
+ * Δ 药丸命中测试，span-limited (code review): pillRect gets each interval's
+ * own on-screen width so its hit-rect can never reach into a neighboring
+ * interval or (for a 0ms-delta pair sharing an x) collide with a mark's own
+ * hit-test. Shared by onPointerDown (must run BEFORE hitTestMark — see
+ * onPointerDown's comment) and handleClick's fallback pill check.
+ */
+function findHitPill(marks: MarkLite[], v: Viewport, laneY: number, x: number, y: number) {
+  for (const iv of intervals(marks)) {
+    const spanPx = msToPx(v, iv.endMs) - msToPx(v, iv.startMs)
+    if (inRect(pillRect(iv.midMs, v, laneY, spanPx), x, y)) return iv
+  }
+  return null
 }
 
 type DragState =
@@ -170,6 +185,16 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     const take = lane.takes.find(t => t.id === s.takeId)
     if (!take) { dragStateRef.current = null; return }
 
+    // Δ 药丸优先于标记命中测试：hitTestMark 只按 x 距离判断（±6px），完全不看
+    // y，所以像 0ms-delta 相邻标记对这种 pill 与标记共享同一 x 的情形，会被
+    // hitTestMark 抢先命中而吞掉药丸点击（code review repro）。药丸的 y 带
+    // 固定在标记行下方（PILL_Y_OFFSET=18，与标记点 ±7px 的 y 带不重叠，参见
+    // layout.ts），所以这里提前判断不会误伤正常的标记点击。
+    if (findHitPill(take.marks, v, RULER_H + laneIdx * LANE_H, x, y)) {
+      dragStateRef.current = { kind: 'click' }
+      return
+    }
+
     const hit = hitTestMark(take.marks, v, x)
     if (hit) {
       const m = take.marks.find(mm => mm.id === hit)!
@@ -287,12 +312,11 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     if (!take) return
     const v = vp()
 
-    for (const iv of intervals(take.marks)) {
-      if (inRect(pillRect(iv.midMs, v, RULER_H + laneIdx * LANE_H), x, y)) {
-        const { markId, patch } = holdingPatch(iv, !iv.holding)
-        void toggleHolding(markId, patch)
-        return
-      }
+    const hitIv = findHitPill(take.marks, v, RULER_H + laneIdx * LANE_H, x, y)
+    if (hitIv) {
+      const { markId, patch } = holdingPatch(hitIv, !hitIv.holding)
+      void toggleHolding(markId, patch)
+      return
     }
 
     // 已选中轨的空白处：播放头 seek 到点击处（按帧取整）— 不改变当前选中标记。
