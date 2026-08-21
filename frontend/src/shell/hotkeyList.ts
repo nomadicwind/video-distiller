@@ -20,6 +20,8 @@ export const HOTKEYS: HotkeyRow[] = [
   { keys: ['[', ']'], label: '逐帧', statusbar: true },
   { keys: [',', '.'], label: '微移 ±10ms' },
   { keys: ['Delete'], label: '删除标记' },
+  { keys: ['⌘/Ctrl + Z'], label: '撤销' },
+  { keys: ['⌘/Ctrl + Shift + Z'], label: '重做' },
   { keys: ['T'], label: '打表', statusbar: true },
   { keys: ['E'], label: '录入模式', statusbar: true, statusbarLabel: '录入' },
   { keys: ['A'], label: '聚合' },

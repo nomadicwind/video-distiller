@@ -3,6 +3,7 @@ import { deleteSelected, insertAtPlayhead, nudgeSelected, tallyAtPlayhead } from
 import type { Video } from './api/types'
 import { frameStep, seekMs, videoEl } from './player/Player'
 import { useSession } from './state/store'
+import { redo, undo } from './state/undo'
 
 /**
  * Only genuine text-entry targets swallow single-key hotkeys entirely
@@ -27,6 +28,16 @@ export function useHotkeys(video: Video): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTextEntryTarget(e.target)) return
+      // Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z checked first (and unconditionally on
+      // entryMode) so a modifier-held Z is never swallowed by the L0
+      // single-letter entry-mode branch below, and so it also overrides the
+      // browser's own undo — hence preventDefault regardless of stack state.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) void redo()
+        else void undo()
+        return
+      }
       const st = useSession.getState()
       const lane = st.analysis?.lanes.find(l => l.id === st.laneId)
       if (st.entryMode && lane?.layer === 'L0' && /^[a-z0-9]$/i.test(e.key)) {
