@@ -9,6 +9,10 @@ export interface Session {
   playheadMs: number
   entryMode: boolean
   showAggregate: boolean
+  /** 时间轴吸附开关（磁铁图标，默认开，快捷键 S）— Toolbar + hotkeys 共用。 */
+  snapOn: boolean
+  /** ? 快捷键浮层开关位（浮层本身在任务 12 实现）。 */
+  showHotkeys: boolean
 
   setAnalysis: (a: AnalysisTree) => void
   clearAnalysis: () => void
@@ -24,6 +28,8 @@ export interface Session {
   clearTallyLocal: () => void
   toggleEntryMode: () => void
   toggleAggregate: () => void
+  toggleSnap: () => void
+  toggleHotkeys: () => void
 }
 
 const mapMarks = (a: AnalysisTree, takeId: string, f: (marks: Mark[]) => Mark[]): AnalysisTree => ({
@@ -40,6 +46,7 @@ const byT = <T extends { t_ms: number }>(xs: T[]): T[] =>
 export const useSession = create<Session>((set, get) => ({
   analysis: null, laneId: null, takeId: null, selectedMarkId: null,
   playheadMs: 0, entryMode: false, showAggregate: false,
+  snapOn: true, showHotkeys: false,
 
   setAnalysis: a => {
     const lane = a.lanes[0] ?? null
@@ -99,6 +106,8 @@ export const useSession = create<Session>((set, get) => ({
     set(s => ({ analysis: s.analysis && { ...s.analysis, tally: [] } })),
   toggleEntryMode: () => set(s => ({ entryMode: !s.entryMode })),
   toggleAggregate: () => set(s => ({ showAggregate: !s.showAggregate })),
+  toggleSnap: () => set(s => ({ snapOn: !s.snapOn })),
+  toggleHotkeys: () => set(s => ({ showHotkeys: !s.showHotkeys })),
 }))
 
 export const currentTake = (s: Session): Take | null => {

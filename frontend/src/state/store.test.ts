@@ -64,6 +64,20 @@ test('tally local ops keep sorted', () => {
   expect(useSession.getState().analysis!.tally).toEqual([])
 })
 
+test('toggleSnap and toggleHotkeys flip their booleans (default snapOn=true, showHotkeys=false)', () => {
+  const s = useSession.getState()
+  expect(s.snapOn).toBe(true)
+  expect(s.showHotkeys).toBe(false)
+  s.toggleSnap()
+  expect(useSession.getState().snapOn).toBe(false)
+  s.toggleSnap()
+  expect(useSession.getState().snapOn).toBe(true)
+  s.toggleHotkeys()
+  expect(useSession.getState().showHotkeys).toBe(true)
+  s.toggleHotkeys()
+  expect(useSession.getState().showHotkeys).toBe(false)
+})
+
 test('clearAnalysis resets the session window to its empty state', () => {
   const s = useSession.getState()
   s.selectTake('tk_a')

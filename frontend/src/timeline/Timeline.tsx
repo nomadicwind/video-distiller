@@ -1,22 +1,85 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Aggregate, Video } from '../api/types'
-import { toggleHolding } from '../actions'
+import type { Aggregate, Tally, Video } from '../api/types'
+import { moveMark, toggleHolding } from '../actions'
 import { seekMs } from '../player/Player'
 import { useSession } from '../state/store'
-import { draw, timelineHeight } from './draw'
+import { Toolbar } from './Toolbar'
+import { draw, timelineHeight, type DragPreview } from './draw'
 import {
   GUTTER_W, hitTestMark, holdingPatch, inRect, intervals, LANE_H, panned, pillRect, pxToMs,
-  RULER_H, zoomed,
+  RULER_H, snapMs, zoomed,
 } from './layout'
 import type { Viewport } from './layout'
+
+const frameRound = (ms: number, fps: number): number => {
+  const frame = 1000 / fps
+  return Math.round(ms / frame) * frame
+}
+
+const clampMs = (ms: number, durationMs: number): number => Math.max(0, Math.min(ms, durationMs))
+
+/**
+ * Magnets a dragged mark can snap to (spec §6.3: "吸附开时对打表 marker/相邻
+ * 标记 ±6px 吸附"): every tally flag's t_ms, plus the dragged mark's
+ * immediate neighbors (by t_ms order) within its own take — not every mark
+ * in the lane, which would make "adjacent" meaningless.
+ */
+function magnetsFor(marks: { id: string; t_ms: number }[], markId: string, tally: Tally[]): number[] {
+  const magnets = tally.map(t => t.t_ms)
+  const idx = marks.findIndex(m => m.id === markId)
+  if (idx < 0) return magnets
+  if (idx > 0) magnets.push(marks[idx - 1].t_ms)
+  if (idx + 1 < marks.length) magnets.push(marks[idx + 1].t_ms)
+  return magnets
+}
+
+type DragState =
+  | { kind: 'ruler' }
+  | { kind: 'mark'; markId: string; startX: number; startY: number; moved: boolean; origTMs: number; pointerId: number }
+  | { kind: 'click' }
+  | null
 
 export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggregate | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const s = useSession()
+  const fps = video.fps ?? 30
   const durationMs = video.duration_ms ?? 10_000
   const [viewport, setViewport] = useState<Viewport>({
     startMs: 0, endMs: Math.min(10_000, durationMs), widthPx: 800,
   })
+
+  // 悬停幽灵线（ghost line）/ 标尺气泡时码 — pointermove 期间 rAF 节流更新
+  // （spec §9.4: 60fps；避免原生 pointermove 事件密度超过刷新率造成多余渲染）。
+  const [hoverMs, setHoverMsState] = useState<number | null>(null)
+  const hoverRaf = useRef<number | null>(null)
+  const hoverPending = useRef<number | null>(null)
+  const scheduleHover = (ms: number | null) => {
+    hoverPending.current = ms
+    if (hoverRaf.current != null) return
+    hoverRaf.current = requestAnimationFrame(() => {
+      hoverRaf.current = null
+      setHoverMsState(hoverPending.current)
+    })
+  }
+
+  // 标记拖动实时预览 — 同样 rAF 节流。
+  const [dragPreview, setDragPreviewState] = useState<DragPreview | null>(null)
+  const dragRaf = useRef<number | null>(null)
+  const dragPending = useRef<DragPreview | null>(null)
+  const scheduleDragPreview = (p: DragPreview | null) => {
+    dragPending.current = p
+    if (dragRaf.current != null) return
+    dragRaf.current = requestAnimationFrame(() => {
+      dragRaf.current = null
+      setDragPreviewState(dragPending.current)
+    })
+  }
+
+  // 播放头时码气泡的专用可见性信号（区别于 hoverMs 的幽灵线气泡）：标尺/手柄
+  // scrub 拖动中为 true；标记拖动中由 dragPreview!==null 驱动（见 draw.ts）。
+  const [scrubbing, setScrubbing] = useState(false)
+
+  const dragStateRef = useRef<DragState>(null)
 
   // 播放头出视口 → 自动跟随
   useEffect(() => {
@@ -27,34 +90,38 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     }
   }, [s.playheadMs])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 每次渲染重绘（store 订阅驱动）
+  // 每次渲染重绘（store 订阅驱动）— requestAnimationFrame 统一节流（spec §9.4）。
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !s.analysis) return
-    const totalWidth = canvas.parentElement?.clientWidth ?? 800
-    const contentWidth = Math.max(0, totalWidth - GUTTER_W)
-    const v = { ...viewport, widthPx: contentWidth }
-    const h = timelineHeight(s.analysis.lanes.length)
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = totalWidth * dpr
-    canvas.height = h * dpr
-    canvas.style.width = `${totalWidth}px`
-    canvas.style.height = `${h}px`
-    const ctx = canvas.getContext('2d')!
-    ctx.scale(dpr, dpr)
-    draw(ctx, {
-      lanes: s.analysis.lanes,
-      currentLaneId: s.laneId,
-      currentTakeId: s.takeId,
-      selectedMarkId: s.selectedMarkId,
-      playheadMs: s.playheadMs,
-      tally: s.analysis.tally,
-      aggregate,
-      viewport: v,
-      hoverMs: null,
-      dragPreview: null,
-      snapOn: true,
+    const raf = requestAnimationFrame(() => {
+      const canvas = canvasRef.current
+      if (!canvas || !s.analysis) return
+      const totalWidth = canvas.parentElement?.clientWidth ?? 800
+      const contentWidth = Math.max(0, totalWidth - GUTTER_W)
+      const v = { ...viewport, widthPx: contentWidth }
+      const h = timelineHeight(s.analysis.lanes.length)
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = totalWidth * dpr
+      canvas.height = h * dpr
+      canvas.style.width = `${totalWidth}px`
+      canvas.style.height = `${h}px`
+      const ctx = canvas.getContext('2d')!
+      ctx.scale(dpr, dpr)
+      draw(ctx, {
+        lanes: s.analysis.lanes,
+        currentLaneId: s.laneId,
+        currentTakeId: s.takeId,
+        selectedMarkId: s.selectedMarkId,
+        playheadMs: s.playheadMs,
+        tally: s.analysis.tally,
+        aggregate,
+        viewport: v,
+        hoverMs,
+        dragPreview,
+        snapOn: s.snapOn,
+        scrubbing,
+      })
     })
+    return () => cancelAnimationFrame(raf)
   })
 
   // Viewport.widthPx is track CONTENT width — the gutter (GUTTER_W) is
@@ -64,33 +131,173 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     return { ...viewport, widthPx: Math.max(0, totalWidth - GUTTER_W) }
   }
 
-  const onClick = (e: React.MouseEvent) => {
+  const eventPos = (e: React.PointerEvent): { x: number; y: number } => {
+    const rect = canvasRef.current!.getBoundingClientRect()
+    return { x: e.clientX - rect.left - GUTTER_W, y: e.clientY - rect.top }
+  }
+
+  const seekToX = (x: number, v: Viewport) => {
+    const raw = pxToMs(v, x)
+    seekMs(clampMs(frameRound(raw, fps), durationMs))
+  }
+
+  const onPointerDown = (e: React.PointerEvent) => {
     const a = s.analysis
     const canvas = canvasRef.current
     if (!a || !canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const yPos = e.clientY - rect.top
-    const x = e.clientX - rect.left - GUTTER_W
-    const laneIdx = Math.floor((yPos - RULER_H) / LANE_H)
+    const { x, y } = eventPos(e)
+    const v = vp()
+
+    // 标尺区 / 播放头手柄（手柄全然落在标尺高度内）：立即 seek + 进入连续 scrub。
+    if (y < RULER_H && x >= 0) {
+      canvas.setPointerCapture(e.pointerId)
+      dragStateRef.current = { kind: 'ruler' }
+      setScrubbing(true)
+      seekToX(x, v)
+      return
+    }
+
+    if (y < RULER_H) { dragStateRef.current = null; return }
+
+    const laneIdx = Math.floor((y - RULER_H) / LANE_H)
     const lane = a.lanes[laneIdx]
-    if (!lane) return
-    if (lane.id !== s.laneId) { s.selectLane(lane.id); return }
+    if (!lane) { dragStateRef.current = null; return }
+    if (lane.id !== s.laneId) {
+      s.selectLane(lane.id)
+      dragStateRef.current = null
+      return
+    }
+    const take = lane.takes.find(t => t.id === s.takeId)
+    if (!take) { dragStateRef.current = null; return }
+
+    const hit = hitTestMark(take.marks, v, x)
+    if (hit) {
+      const m = take.marks.find(mm => mm.id === hit)!
+      canvas.setPointerCapture(e.pointerId)
+      dragStateRef.current = {
+        kind: 'mark', markId: hit, startX: x, startY: y, moved: false,
+        origTMs: m.t_ms, pointerId: e.pointerId,
+      }
+      return
+    }
+
+    // 空白 / Δ 药丸：既非标尺也非可拖动标记，语义留到 pointerup（原点击行为）。
+    dragStateRef.current = { kind: 'click' }
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const a = s.analysis
+    const canvas = canvasRef.current
+    if (!a || !canvas) return
+    const { x, y } = eventPos(e)
+    const v = vp()
+    const drag = dragStateRef.current
+
+    if (drag?.kind === 'ruler') {
+      canvas.style.cursor = 'col-resize'
+      seekToX(x, v)
+      return
+    }
+
+    if (drag?.kind === 'mark') {
+      const dx = x - drag.startX
+      const dy = y - drag.startY
+      if (!drag.moved && Math.hypot(dx, dy) < 3) return
+      if (!drag.moved) {
+        drag.moved = true
+        s.selectMark(drag.markId)
+        canvas.style.cursor = 'grabbing'
+      }
+      const lane = a.lanes.find(l => l.id === s.laneId)
+      const take = lane?.takes.find(t => t.id === s.takeId)
+      if (!take) return
+      const raw = pxToMs(v, x)
+      const magnets = s.snapOn ? magnetsFor(take.marks, drag.markId, a.tally) : []
+      const snapped = snapMs(raw, fps, magnets, v)
+      scheduleDragPreview({ markId: drag.markId, tMs: clampMs(snapped, durationMs) })
+      return
+    }
+
+    // 无拖动进行中：更新 hover 幽灵线 + 光标反馈（grab/col-resize/默认）。
+    // x<0 表示悬停在沟槽列（左侧轨道头），不属于时间轴内容区，不显示幽灵线。
+    if (x < 0) {
+      canvas.style.cursor = ''
+      scheduleHover(null)
+      return
+    }
+    if (y < RULER_H) {
+      canvas.style.cursor = 'col-resize'
+      scheduleHover(pxToMs(v, x))
+      return
+    }
+    const laneIdx = Math.floor((y - RULER_H) / LANE_H)
+    const lane = a.lanes[laneIdx]
+    const take = lane?.id === s.laneId ? lane.takes.find(t => t.id === s.takeId) : undefined
+    const overMark = take ? hitTestMark(take.marks, v, x) : null
+    canvas.style.cursor = overMark ? 'grab' : ''
+    scheduleHover(pxToMs(v, x))
+  }
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    const canvas = canvasRef.current
+    const drag = dragStateRef.current
+    if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
+
+    if (drag?.kind === 'ruler') {
+      setScrubbing(false)
+      if (canvas) canvas.style.cursor = ''
+      dragStateRef.current = null
+      return
+    }
+
+    if (drag?.kind === 'mark') {
+      if (canvas) canvas.style.cursor = ''
+      if (drag.moved) {
+        const finalTMs = dragPending.current?.tMs ?? drag.origTMs
+        scheduleDragPreview(null)
+        void moveMark(drag.markId, finalTMs)
+      } else {
+        // 未拖动过阈值 → 原点击语义：选中 + seek
+        s.selectMark(drag.markId)
+        seekMs(drag.origTMs)
+      }
+      dragStateRef.current = null
+      return
+    }
+
+    if (drag?.kind === 'click') handleClick(e)
+    dragStateRef.current = null
+  }
+
+  const onPointerLeave = () => {
+    scheduleHover(null)
+    if (canvasRef.current) canvasRef.current.style.cursor = ''
+  }
+
+  /** 空白处 seek（按帧取整）/ Δ 药丸 holding 切换 — 未拖动的原点击语义。 */
+  const handleClick = (e: React.PointerEvent) => {
+    const a = s.analysis
+    if (!a) return
+    const { x, y } = eventPos(e)
+    if (y < RULER_H) return
+    const laneIdx = Math.floor((y - RULER_H) / LANE_H)
+    const lane = a.lanes[laneIdx]
+    if (!lane || lane.id !== s.laneId) return
     const take = lane.takes.find(t => t.id === s.takeId)
     if (!take) return
     const v = vp()
+
     for (const iv of intervals(take.marks)) {
-      if (inRect(pillRect(iv.midMs, v, RULER_H + laneIdx * LANE_H), x, yPos)) {
+      if (inRect(pillRect(iv.midMs, v, RULER_H + laneIdx * LANE_H), x, y)) {
         const { markId, patch } = holdingPatch(iv, !iv.holding)
         void toggleHolding(markId, patch)
         return
       }
     }
-    const hit = hitTestMark(take.marks, v, x)
-    s.selectMark(hit)
-    if (hit) {
-      const m = take.marks.find(mm => mm.id === hit)!
-      seekMs(m.t_ms)
-    }
+
+    // 已选中轨的空白处：播放头 seek 到点击处（按帧取整）— 不改变当前选中标记。
+    const raw = pxToMs(v, x)
+    seekMs(clampMs(frameRound(raw, fps), durationMs))
   }
 
   const onWheel = (e: React.WheelEvent) => {
@@ -105,5 +312,25 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
   }
 
   if (!s.analysis) return null
-  return <canvas ref={canvasRef} onClick={onClick} onWheel={onWheel} />
+  return (
+    <>
+      <Toolbar
+        snapOn={s.snapOn}
+        onSnap={s.toggleSnap}
+        viewport={viewport}
+        durationMs={durationMs}
+        onViewport={setViewport}
+      />
+      <div className="tl-canvas-wrap">
+        <canvas
+          ref={canvasRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerLeave}
+          onWheel={onWheel}
+        />
+      </div>
+    </>
+  )
 }

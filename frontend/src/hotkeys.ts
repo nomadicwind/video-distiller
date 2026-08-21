@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { deleteSelected, insertAtPlayhead, nudgeSelected, tallyAtPlayhead } from './actions'
 import type { Video } from './api/types'
-import { frameStep, videoEl } from './player/Player'
+import { frameStep, seekMs, videoEl } from './player/Player'
 import { useSession } from './state/store'
 
 export function useHotkeys(video: Video): void {
@@ -48,6 +48,14 @@ export function useHotkeys(video: Video): void {
         void tallyAtPlayhead()
       } else if (e.key === 'a' || e.key === 'A') {
         st.toggleAggregate()
+      } else if (e.key === 's' || e.key === 'S') {
+        st.toggleSnap()
+      } else if (e.key === 'Home') {
+        // 浏览器默认把 Home 当作"滚动到页面顶部"处理，需要显式拦截。
+        e.preventDefault()
+        seekMs(0)
+      } else if (e.key === '?') {
+        st.toggleHotkeys()
       }
     }
     window.addEventListener('keydown', onKey)

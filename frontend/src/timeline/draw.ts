@@ -23,6 +23,13 @@ export interface TimelineData {
   dragPreview: DragPreview | null
   /** 吸附开关（预留：影响未来吸附相关的视觉提示） */
   snapOn: boolean
+  /**
+   * 播放头正在被主动操作（标尺/手柄 scrub 拖动中，或某标记正被拖动）。
+   * 驱动播放头手柄旁的时码气泡显隐 — 有别于 hoverMs（悬停光标处的独立幽灵线
+   * 气泡，任意悬停都会显示）。task 5 曾用 hoverMs/dragPreview 作占位代理，
+   * 现由 Timeline.tsx 提供的这个专用信号接管。
+   */
+  scrubbing: boolean
 }
 
 export function timelineHeight(laneCount: number): number {
@@ -396,7 +403,7 @@ export function draw(ctx: CanvasRenderingContext2D, d: TimelineData): void {
   ctx.closePath()
   ctx.fill()
 
-  if (d.hoverMs !== null || d.dragPreview !== null) {
+  if (d.scrubbing || d.dragPreview !== null) {
     drawBubble(ctx, phX + 9, 5, fmtTc(d.playheadMs), theme)
   }
 

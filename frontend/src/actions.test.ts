@@ -22,7 +22,7 @@ vi.mock('./api/client', () => ({
   },
 }))
 
-import { deleteSelected, insertAtPlayhead, nudgeSelected, tallyAtPlayhead, toggleHolding } from './actions'
+import { deleteSelected, insertAtPlayhead, moveMark, nudgeSelected, tallyAtPlayhead, toggleHolding } from './actions'
 import { api } from './api/client'
 
 const tree: AnalysisTree = {
@@ -102,6 +102,28 @@ test('nudgeSelected also patches the holder mark end_ms when it moves the held e
   const take = useSession.getState().analysis!.lanes[0].takes[0]
   expect(take.marks.find(m => m.id === 'm1')!.end_ms).toBe(310)
   expect(take.marks.find(m => m.id === 'm2')!.t_ms).toBe(310)
+})
+
+test('moveMark patches the given mark to an absolute t_ms regardless of selection', async () => {
+  // m1 is selected (per beforeEach) but we move m2's precursor — a plain
+  // single-mark tree here, so use m1 directly with an unrelated selection
+  // to prove moveMark doesn't rely on s.selectedMarkId.
+  useSession.getState().selectMark(null)
+  await moveMark('m1', 250)
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { t_ms: 250 })
+  const take = useSession.getState().analysis!.lanes[0].takes[0]
+  expect(take.marks[0].t_ms).toBe(250)
+})
+
+test('moveMark also patches the holder mark end_ms when it moves the held endpoint', async () => {
+  useSession.getState().setAnalysis(structuredClone(treeWithHold))
+  useSession.getState().selectMark(null)
+  await moveMark('m2', 320)
+  expect(api.patchMark).toHaveBeenCalledWith('m2', { t_ms: 320 })
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { end_ms: 320 })
+  const take = useSession.getState().analysis!.lanes[0].takes[0]
+  expect(take.marks.find(m => m.id === 'm1')!.end_ms).toBe(320)
+  expect(take.marks.find(m => m.id === 'm2')!.t_ms).toBe(320)
 })
 
 test('deleteSelected clears the holder mark end_ms before deleting the held endpoint', async () => {

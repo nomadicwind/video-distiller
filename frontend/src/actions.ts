@@ -1,23 +1,41 @@
 import { api } from './api/client'
+import type { Mark, Take } from './api/types'
 import { currentTake, useSession } from './state/store'
 
-export async function nudgeSelected(deltaMs: number): Promise<void> {
-  const s = useSession.getState()
-  const take = currentTake(s)
-  const mark = take?.marks.find(m => m.id === s.selectedMarkId)
-  if (!mark) return
-  // A previous mark may be "holding" until this mark's current t_ms
-  // (a.end_ms === mark.t_ms, see timeline/layout.ts `intervals`). Moving
-  // the endpoint without moving the hold would strand a.end_ms in the DB
-  // as an orphan the UI no longer renders as held.
+/**
+ * Commits `mark`'s t_ms to `newTMs` (PATCH + local store update). A previous
+ * mark may be "holding" until this mark's current t_ms (a.end_ms ===
+ * mark.t_ms, see timeline/layout.ts `intervals`) — moving the endpoint
+ * without moving the hold would strand a.end_ms in the DB as an orphan the
+ * UI no longer renders as held, so its end_ms is patched to follow along.
+ * Shared by nudgeSelected (relative, hotkey-driven) and moveMark (absolute,
+ * drag-driven).
+ */
+async function applyMarkMove(mark: Mark, newTMs: number, take: Take | null): Promise<void> {
   const holder = take?.marks.find(m => m.id !== mark.id && m.end_ms === mark.t_ms) ?? null
-  const newTMs = mark.t_ms + deltaMs
   const updated = await api.patchMark(mark.id, { t_ms: newTMs })
   useSession.getState().updateMarkLocal(updated)
   if (holder) {
     const updatedHolder = await api.patchMark(holder.id, { end_ms: newTMs })
     useSession.getState().updateMarkLocal(updatedHolder)
   }
+}
+
+export async function nudgeSelected(deltaMs: number): Promise<void> {
+  const s = useSession.getState()
+  const take = currentTake(s)
+  const mark = take?.marks.find(m => m.id === s.selectedMarkId)
+  if (!mark) return
+  await applyMarkMove(mark, mark.t_ms + deltaMs, take)
+}
+
+/** Commits a timeline drag: `markId` (not necessarily the selected mark) moves to the absolute `newTMs`. */
+export async function moveMark(markId: string, newTMs: number): Promise<void> {
+  const s = useSession.getState()
+  const take = currentTake(s)
+  const mark = take?.marks.find(m => m.id === markId)
+  if (!mark) return
+  await applyMarkMove(mark, newTMs, take)
 }
 
 export async function deleteSelected(): Promise<void> {
