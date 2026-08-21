@@ -1,0 +1,22 @@
+/* strip.css — ThumbStrip visual rules (spec §5: 56px, rounded, bottom playhead progress). */
+
+.strip {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-m);
+  background: var(--bg-inset);
+  cursor: pointer;
+}
+.strip img { display: block; }
+
+.strip-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}

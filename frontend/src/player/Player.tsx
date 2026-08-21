@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { api } from '../api/client'
+import type { Video } from '../api/types'
 import { useSession } from '../state/store'
 import { stepFrame } from '../time/frames'
-
-const RATES = [0.25, 0.5, 1, 2]
 
 export function videoEl(): HTMLVideoElement | null {
   return document.getElementById('vd-video') as HTMLVideoElement | null
@@ -21,7 +20,14 @@ export function seekMs(tMs: number): void {
   if (v) v.currentTime = tMs / 1000
 }
 
-export function Player({ videoId, fps, durationMs }: { videoId: string; fps: number; durationMs: number }) {
+/**
+ * Renders just the <video> element inside the monitor frame (black inset,
+ * object-fit: contain). Playback controls live in sibling Transport, which
+ * drives this element through the exported videoEl()/frameStep()/seekMs()
+ * functions above — their signatures are load-bearing for hotkeys.ts,
+ * Timeline, ThumbStrip and InferPanel, and stay unchanged here.
+ */
+export function Player({ video }: { video: Video }): JSX.Element {
   const ref = useRef<HTMLVideoElement>(null)
   const setPlayhead = useSession(s => s.setPlayhead)
 
@@ -35,20 +41,13 @@ export function Player({ videoId, fps, durationMs }: { videoId: string; fps: num
     }
     handle = v.requestVideoFrameCallback(loop)
     return () => v.cancelVideoFrameCallback(handle)
-  }, [setPlayhead, videoId])
+  }, [setPlayhead, video.id])
+
+  const ratio = video.width && video.height ? `${video.width} / ${video.height}` : '16 / 9'
 
   return (
-    <div className="player">
-      <video ref={ref} id="vd-video" src={api.videoFileUrl(videoId)} />
-      <div className="player-controls">
-        {RATES.map(r => (
-          <button key={r} onClick={() => { const v = videoEl(); if (v) v.playbackRate = r }}>
-            {r}×
-          </button>
-        ))}
-        <button onClick={() => frameStep(-1, fps, durationMs)}>◀ 上一帧 [</button>
-        <button onClick={() => frameStep(1, fps, durationMs)}>] 下一帧 ▶</button>
-      </div>
+    <div className="monitor" style={{ aspectRatio: ratio }}>
+      <video ref={ref} id="vd-video" src={api.videoFileUrl(video.id)} />
     </div>
   )
 }

@@ -10,7 +10,6 @@ input, select, textarea {
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
-video { width: 100%; max-height: 46vh; background: #000; display: block; }
 canvas { display: block; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -82,3 +81,69 @@ canvas { display: block; }
 .video-cover svg { width: 32px; height: 32px; color: var(--text-3); }
 .video-name { color: var(--text-1); font-size: 13px; margin-bottom: 4px; word-break: break-word; }
 .video-fps { color: var(--text-3); font-size: 11px; margin-bottom: 10px; }
+
+/* ---------- Workbench (spec §5) ---------- */
+.topbar-context-name {
+  color: var(--text-1);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+.topbar-context select { max-width: 220px; }
+
+.workbench {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workbench-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 1px;
+  background: var(--bg-app);
+}
+
+.workbench-pane { background: var(--bg-panel); }
+
+/*
+ * min-width: 0 on every column-1/spanning pane below is load-bearing, not
+ * decorative: the thumbstrip's <img> carries an explicit pixel width (the
+ * full sprite-sheet width) and the timeline's <canvas> is sized imperatively
+ * off its own parent's clientWidth. Either one, left to its default
+ * min-width:auto, feeds its full content width back into the "1fr" column's
+ * intrinsic-sizing pass and inflates it (and, since the timeline spans both
+ * columns, that inflation compounds into the whole grid). min-width:0 caps
+ * each pane's contribution at the grid's actual assigned track size.
+ */
+.workbench-monitor { grid-column: 1; grid-row: 1; padding: 12px 12px 8px; min-width: 0; }
+.workbench-transport { grid-column: 1; grid-row: 2; padding: 0 12px 8px; min-width: 0; }
+/*
+ * row3 is the grid's only 1fr track, so whenever the inspector column (which
+ * spans rows 1-3) needs more height than the monitor+transport+strip stack
+ * naturally does, ALL of that slack lands here. Bottom-align the actual
+ * 56px strip so any such slack reads as breathing room above it rather than
+ * a dead gap between the strip and the timeline immediately below.
+ */
+.workbench-strip {
+  grid-column: 1; grid-row: 3; padding: 0 12px 12px; min-width: 0; min-height: 0;
+  display: flex; align-items: flex-end;
+}
+.workbench-inspector {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  padding: 12px;
+  overflow-y: auto;
+  min-width: 0;
+  min-height: 0;
+}
+.workbench-timeline {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+}

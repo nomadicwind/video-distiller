@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Film, Link as LinkIcon, Upload } from 'lucide-react'
+import { ArrowLeft, Film, Link as LinkIcon, Upload } from 'lucide-react'
 import { api } from './api/client'
 import type { Video, Aggregate, Keymap } from './api/types'
 import { useHotkeys } from './hotkeys'
 import { Player } from './player/Player'
-import { TallyBar } from './tally/TallyBar'
+import { Transport } from './player/Transport'
 import { ThumbStrip } from './strip/ThumbStrip'
 import { Timeline } from './timeline/Timeline'
 import { useSession } from './state/store'
@@ -17,6 +17,7 @@ import { KeymapPage } from './pages/KeymapPage'
 import { PlaybooksPage } from './pages/PlaybooksPage'
 import { PlaybookEditor } from './pages/PlaybookEditor'
 import { ExecPage } from './pages/ExecPage'
+import { StatusBar } from './shell/StatusBar'
 import { TopBar } from './shell/TopBar'
 import type { NavPage } from './shell/TopBar'
 import { Button } from './ui/Button'
@@ -25,15 +26,59 @@ import { Field } from './ui/Field'
 import { Badge } from './ui/Badge'
 import { EmptyState } from './ui/EmptyState'
 import { Tooltip } from './ui/Tooltip'
+import { fmtTc } from './time/frames'
 
-function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
+/**
+ * TopBar's context slot while the Workbench is open: ← 返回 + analysis name
+ * + keymap selector. `analysis` lives in the global useSession store, so
+ * this reads it directly rather than needing Workbench to lift state up —
+ * it mounts/unmounts independently of Workbench's own render tree.
+ */
+function WorkbenchTopContext({ onBack }: { onBack: () => void }): JSX.Element | null {
+  const analysis = useSession(s => s.analysis)
+  const setAnalysis = useSession(s => s.setAnalysis)
+  const [keymaps, setKeymaps] = useState<Keymap[]>([])
+  useEffect(() => { void api.listKeymaps().then(setKeymaps) }, [])
+
+  if (!analysis) return null
+  const latestByIdEntries = [...new Map(
+    keymaps.sort((a, b) => a.version - b.version).map(k => [k.id, k])).entries()]
+
+  return (
+    <>
+      <Button variant="ghost" size="sm" icon={<ArrowLeft />} onClick={onBack}>返回</Button>
+      <span className="topbar-context-name">{analysis.name}</span>
+      <select
+        value={analysis.keymap_id ? `${analysis.keymap_id}@${analysis.keymap_version}` : ''}
+        onChange={async e => {
+          const [kid, ver] = e.target.value.split('@')
+          if (!kid) return
+          await api.bindKeymap(analysis.id, kid, Number(ver))
+          void api.getAnalysis(analysis.id).then(setAnalysis)
+        }}>
+        <option value="">未绑定键位</option>
+        {latestByIdEntries.map(([id, k]) => (
+          <option key={id} value={`${id}@${k.version}`}>{id} v{k.version}</option>
+        ))}
+        {analysis.keymap_id && !latestByIdEntries.some(([id, k]) =>
+          id === analysis.keymap_id && k.version === analysis.keymap_version) && (
+          <option value={`${analysis.keymap_id}@${analysis.keymap_version}`}>
+            {analysis.keymap_id} v{analysis.keymap_version}（钉住的旧版）
+          </option>
+        )}
+      </select>
+    </>
+  )
+}
+
+function Workbench({ video }: { video: Video }) {
   const analysis = useSession(s => s.analysis)
   const setAnalysis = useSession(s => s.setAnalysis)
   const clearAnalysis = useSession(s => s.clearAnalysis)
+  const entryMode = useSession(s => s.entryMode)
   const [aggregate, setAggregate] = useState<Aggregate | null>(null)
   const showAggregate = useSession(st => st.showAggregate)
   const laneId = useSession(st => st.laneId)
-  const [keymaps, setKeymaps] = useState<Keymap[]>([])
   useHotkeys(video)
 
   useEffect(() => {
@@ -54,45 +99,33 @@ function Workbench({ video, onBack }: { video: Video; onBack: () => void }) {
     return () => { ignore = true }
   }, [showAggregate, laneId])
 
-  useEffect(() => { void api.listKeymaps().then(setKeymaps) }, [])
-
   if (!analysis || analysis.video_id !== video.id) return <p>加载中…</p>
-  const latestByIdEntries = [...new Map(
-    keymaps.sort((a, b) => a.version - b.version).map(k => [k.id, k])).entries()]
+  const fps = video.fps ?? 30
+  const durationMs = video.duration_ms ?? 0
   return (
     <div className="workbench">
-      <div className="main">
-        <p>
-          <button onClick={onBack}>← 返回</button> {analysis.name}
-          <select
-            value={analysis.keymap_id ? `${analysis.keymap_id}@${analysis.keymap_version}` : ''}
-            onChange={async e => {
-              const [kid, ver] = e.target.value.split('@')
-              if (!kid) return
-              await api.bindKeymap(analysis.id, kid, Number(ver))
-              void api.getAnalysis(analysis.id).then(setAnalysis)
-            }}>
-            <option value="">未绑定键位</option>
-            {latestByIdEntries.map(([id, k]) => (
-              <option key={id} value={`${id}@${k.version}`}>{id} v{k.version}</option>
-            ))}
-            {analysis.keymap_id && !latestByIdEntries.some(([id, k]) =>
-              id === analysis.keymap_id && k.version === analysis.keymap_version) && (
-              <option value={`${analysis.keymap_id}@${analysis.keymap_version}`}>
-                {analysis.keymap_id} v{analysis.keymap_version}（钉住的旧版）
-              </option>
-            )}
-          </select>
-        </p>
-        <Player videoId={video.id} fps={video.fps ?? 30} durationMs={video.duration_ms ?? 0} />
-        <TallyBar />
-        <ThumbStrip video={video} />
-        <Timeline video={video} aggregate={aggregate} />
+      <div className="workbench-grid">
+        <div className="workbench-pane workbench-monitor">
+          <Player video={video} />
+        </div>
+        <div className="workbench-pane workbench-transport">
+          <Transport video={video} />
+        </div>
+        <div className="workbench-pane workbench-strip">
+          <ThumbStrip video={video} />
+        </div>
+        <div className="workbench-pane workbench-inspector">
+          <EntryPanel />
+          <InferPanel />
+        </div>
+        <div className="workbench-pane workbench-timeline">
+          <Timeline video={video} aggregate={aggregate} />
+        </div>
       </div>
-      <div>
-        <EntryPanel />
-        <InferPanel />
-      </div>
+      <StatusBar
+        left={entryMode ? '录入模式 · 敲键即打点' : '点击时间轴定位 · 键帽或录入模式打点'}
+        right={<span>{fps} fps · {fmtTc(durationMs)}</span>}
+      />
     </div>
   )
 }
@@ -186,7 +219,7 @@ export default function App() {
 
   let content: ReactNode
   if (video) {
-    content = <Workbench video={video} onBack={() => setVideo(null)} />
+    content = <Workbench video={video} />
   } else if (editingPlaybook) {
     content = <PlaybookEditor playbookId={editingPlaybook} onBack={() => setEditingPlaybook(null)} />
   } else if (page === 'catalog') {
@@ -203,7 +236,8 @@ export default function App() {
 
   return (
     <>
-      <TopBar page={topBarPage} onNav={setPage} />
+      <TopBar page={topBarPage} onNav={setPage}
+        context={video ? <WorkbenchTopContext onBack={() => setVideo(null)} /> : undefined} />
       {content}
       <ErrorBar />
     </>
