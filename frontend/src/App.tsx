@@ -162,6 +162,27 @@ const STATUS_LABEL: Record<Video['status'], string> = {
   failed: '失败',
 }
 
+/**
+ * 库封面（M5 复查修复 #3）：就绪视频用 ThumbStrip 同一份 sprite 当封面
+ * （api.spriteUrl），而不是永远显示占位渐变+图标。sprite 是横向单行 tile
+ * （见 make_sprite），CSS 用 object-position: left 只裁出大致第一帧。
+ * 非就绪视频或 sprite 加载失败（onError）时回退到原来的占位样式。
+ */
+function VideoCover({ video }: { video: Video }): JSX.Element {
+  const [broken, setBroken] = useState(false)
+  const showSprite = video.status === 'ready' && !broken
+  return (
+    <div className="video-cover">
+      {showSprite ? (
+        <img className="video-cover-img" src={api.spriteUrl(video.id)} alt=""
+          onError={() => setBroken(true)} />
+      ) : (
+        <div className="video-cover-fallback"><Film /></div>
+      )}
+    </div>
+  )
+}
+
 function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
   const [videos, setVideos] = useState<Video[]>([])
   const [url, setUrl] = useState('')
@@ -212,7 +233,7 @@ function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
             return (
               <Card key={v.id} title={`video-${v.seq}`}
                 extra={v.status === 'failed' && v.error ? <Tooltip tip={v.error}>{badge}</Tooltip> : badge}>
-                <div className="video-cover"><Film /></div>
+                <VideoCover video={v} />
                 <div className="video-name">{v.name}</div>
                 <div className="video-fps mono">{v.fps ?? '—'} fps</div>
                 <Button variant="primary" disabled={v.status !== 'ready'} onClick={() => onOpen(v)}>打开</Button>

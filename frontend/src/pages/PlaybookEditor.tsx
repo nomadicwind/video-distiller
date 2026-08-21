@@ -7,6 +7,7 @@ import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Tabs } from '../ui/Tabs'
+import { Tooltip } from '../ui/Tooltip'
 
 const swap = <T,>(arr: T[], i: number, j: number): T[] => {
   const out = [...arr]; [out[i], out[j]] = [out[j], out[i]]; return out
@@ -211,11 +212,16 @@ export function PlaybookEditor({ playbookId, onBack }: {
           <Card>
             <div className="pbe-preview-toolbar">
               <Tabs tabs={PREVIEW_TABS} active={tab} onChange={k => setTab(k as 'md' | 'ahk')} />
-              {/* download 需要原生 <a download>；沿用 .btn 类名以保持与 Button 组件一致的视觉 */}
-              <a className="btn btn-icon btn-icon-only" href={api.playbookExportUrl(pb.id, tab)}
-                download title="下载预览">
-                <span className="btn-icon-glyph"><Download /></span>
-              </a>
+              {/* download 需要原生 <a download>，不能用 Button 组件；沿用 .btn
+                  类名保持视觉一致，用 kit 的 Tooltip 包一层保持与其他 icon
+                  按钮一致的 hover 提示行为（M5 复查修复 #7，drop 掉原生 title
+                  改用 aria-label 保证可访问名） */}
+              <Tooltip tip="下载预览">
+                <a className="btn btn-icon btn-icon-only" href={api.playbookExportUrl(pb.id, tab)}
+                  download aria-label="下载预览">
+                  <span className="btn-icon-glyph"><Download /></span>
+                </a>
+              </Tooltip>
             </div>
             <pre className="preview mono">{preview}</pre>
           </Card>

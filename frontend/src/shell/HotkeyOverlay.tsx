@@ -3,20 +3,7 @@ import { isTextEntryTarget } from '../hotkeys'
 import { useSession } from '../state/store'
 import { Card } from '../ui/Card'
 import { Keycap } from '../ui/Keycap'
-
-/** spec §4 StatusBar / §8#7 快捷键发现修复：完整快捷键清单，两列展示。 */
-const HOTKEYS: { keys: string[]; label: string }[] = [
-  { keys: ['空格'], label: '播放/暂停' },
-  { keys: ['[', ']'], label: '逐帧' },
-  { keys: [',', '.'], label: '微移 ±10ms' },
-  { keys: ['Delete'], label: '删除标记' },
-  { keys: ['T'], label: '打表' },
-  { keys: ['E'], label: '录入模式' },
-  { keys: ['A'], label: '聚合' },
-  { keys: ['S'], label: '吸附' },
-  { keys: ['Home'], label: '跳开头' },
-  { keys: ['?'], label: '本浮层' },
-]
+import { HOTKEYS } from './hotkeyList'
 
 /**
  * 全局快捷键浮层（spec §4/§8#7）：`useSession.showHotkeys` 受控，挂载在

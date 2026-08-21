@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Pencil, Repeat, Workflow } from 'lucide-react'
 import { api } from '../api/client'
+import { isDegradedRotation } from '../api/degraded'
 import type { Playbook, Rotation } from '../api/types'
+import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { EmptyState } from '../ui/EmptyState'
+import { Tooltip } from '../ui/Tooltip'
+
+/** 备注列非降级噪声时的显示上限（M5 复查修复 #2）：整段截断到约 40 字符，
+ * 完整原文走 title 原生 tooltip。 */
+const NOTE_ELLIPSIS_LEN = 40
+const ellipsize = (s: string): string =>
+  s.length > NOTE_ELLIPSIS_LEN ? `${s.slice(0, NOTE_ELLIPSIS_LEN)}…` : s
 
 type ExportFmt = 'md' | 'ahk' | 'plan' | 'razer'
 const EXPORT_FORMATS: { fmt: ExportFmt; label: string }[] = [
@@ -57,7 +66,15 @@ export function PlaybooksPage({ onBack, onEdit }: {
               {rotations.map(r => (
                 <tr key={r.id}>
                   <td>{r.name}</td>
-                  <td className="pb-muted">{r.note ?? '—'}</td>
+                  <td className="pb-muted">
+                    {isDegradedRotation(r) ? (
+                      <Tooltip tip={r.note ?? ''} wrap>
+                        <Badge kind="warn">LLM 降级</Badge>
+                      </Tooltip>
+                    ) : r.note ? (
+                      <span title={r.note}>{ellipsize(r.note)}</span>
+                    ) : '—'}
+                  </td>
                   <td><ExportChips urlFor={fmt => api.rotationExportUrl(r.id, fmt)} /></td>
                 </tr>
               ))}

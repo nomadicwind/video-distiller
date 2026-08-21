@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlignHorizontalDistributeCenter, ListOrdered, Repeat } from 'lucide-react'
 import { api } from '../api/client'
+import { isDegradedProposal } from '../api/degraded'
 import type { Conflict, DiscoverResult, InferResult, Proposal, Rotation, Section, Skill } from '../api/types'
 import { seekMs } from '../player/Player'
 import { useSession } from '../state/store'
@@ -22,16 +23,6 @@ const STATUS_BADGE: Record<Proposal['status'], 'accent' | 'success' | 'danger'> 
 const STATUS_LABEL: Record<Proposal['status'], string> = {
   pending: '待裁决', accepted: '已接受', rejected: '已拒绝',
 }
-
-/**
- * 错误降噪（修复清单 #8）：LLM 失败时后端把原始异常/拒绝文本塞进 payload.note
- * （backend/src/vd/api.py 的 discover 与 compose 端点同构但字段名不同）——
- * playbook 报告里有明确的 report.fallback；rotation 报告没有专门字段，但命名
- * 失败时 name 必定回退为「未命名循环」，两者互斥且足够可靠地标出"这条 note
- * 其实是错误串，别当正文渲染"。
- */
-const isDegraded = (p: Proposal): boolean =>
-  p.kind === 'playbook' ? !!p.report.fallback : p.payload.name === '未命名循环'
 
 export function InferPanel() {
   const analysis = useSession(s => s.analysis)
@@ -114,13 +105,13 @@ export function InferPanel() {
 
       <div className="proposal-list">
         {proposals.map(p => {
-          const degraded = isDegraded(p)
+          const degraded = isDegradedProposal(p)
           return (
             <Card key={p.id} title={p.payload.name}
               extra={<Badge kind={STATUS_BADGE[p.status]}>{STATUS_LABEL[p.status]}</Badge>}>
               {degraded ? (
                 <div className="proposal-degraded">
-                  <Tooltip tip={p.payload.note}>
+                  <Tooltip tip={p.payload.note} wrap>
                     <Badge kind="warn">LLM 降级</Badge>
                   </Tooltip>
                 </div>

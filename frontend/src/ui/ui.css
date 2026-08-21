@@ -321,6 +321,26 @@
   transition-delay: 400ms;
 }
 
+/* wrapping variant (M5 复查修复 #1): a long raw LLM/鉴权 error string must
+   wrap and cap width instead of rendering as one nowrap line that runs off
+   the viewport. `.tip.tip-wrap` beats the plain `.tip::after` rule above on
+   specificity regardless of source order. */
+.tip.tip-wrap::after {
+  white-space: pre-wrap;
+  max-width: 320px;
+  text-align: left;
+}
+
+/* Anchoring (M5 复查修复 #1): inside the 320px Inspector column, a
+   center-anchored 320px tooltip can clip past the window's right edge.
+   Anchor it to the trigger's right edge instead so it grows leftward,
+   staying within the page rather than overflowing the viewport. */
+.workbench-inspector .tip-wrap::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-6px);
+}
+
 /* ---------- Table (spec §7: 技能目录/键位设置页统一表格样式) ---------- */
 .table {
   width: 100%;

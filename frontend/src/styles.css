@@ -72,13 +72,28 @@ canvas { display: block; }
 .video-cover {
   height: 120px;
   border-radius: var(--radius-m);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+/* status !== 'ready' 或 sprite 加载失败时的兜底（M5 复查修复 #3） */
+.video-cover-fallback {
+  height: 100%;
   background: linear-gradient(135deg, var(--bg-elevated), var(--bg-control));
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 10px;
 }
-.video-cover svg { width: 32px; height: 32px; color: var(--text-3); }
+.video-cover-fallback svg { width: 32px; height: 32px; color: var(--text-3); }
+/* 就绪视频用 sprite 带的首帧区域当封面：sprite 是横向单行 tile（见
+   backend/src/vd/media.py make_sprite），object-position: left 把裁切锚定
+   在最左侧，展示大致第一帧而不是整条 sprite 缩小后的中段。 */
+.video-cover-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left center;
+}
 .video-name { color: var(--text-1); font-size: 13px; margin-bottom: 4px; word-break: break-word; }
 .video-fps { color: var(--text-3); font-size: 11px; margin-bottom: 10px; }
 
@@ -134,7 +149,9 @@ canvas { display: block; }
   gap: 20px;
 }
 .pbe-title-row { display: flex; align-items: center; gap: 12px; }
-.pbe-title-row h1 { margin: 0; font-size: 18px; font-weight: 600; color: var(--text-1); flex: 1; min-width: 0; }
+/* M5 复查修复 #6：字号与 .page-head h1 对齐（20px）；不再 flex:1，徽章紧贴
+   标题而不是被推到列的最右边。 */
+.pbe-title-row h1 { margin: 0; font-size: 20px; font-weight: 600; color: var(--text-1); }
 
 .pbe-grid {
   display: grid;

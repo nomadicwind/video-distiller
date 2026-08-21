@@ -57,7 +57,7 @@ export function Toolbar({
     <div className="tl-toolbar">
       <div className="tl-toolbar-left">
         <Button variant="icon" size="sm" active={snapOn} tip="吸附 (S)" icon={<Magnet />} onClick={onSnap} />
-        <span className="tl-toolbar-hint">点击/拖动标尺定位 · 拖动标记吸附对齐 · 点击 Δ 药丸切换 holding</span>
+        <span className="tl-toolbar-hint">点击/拖动标尺定位 · 拖动标记吸附对齐 · 点击 Δ 药丸切换 holding · 滚轮平移 · ⌘/Ctrl+滚轮缩放</span>
       </div>
       <div className="tl-toolbar-right">
         <Button variant="icon" size="sm" tip="缩小" icon={<ZoomOut />} onClick={() => zoomBy(1.25)} />
