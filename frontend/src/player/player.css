@@ -92,6 +92,9 @@
 }
 .transport-tally-count:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* 打表 Δ/间隔常显文本（spec 修复：无需展开 Popover 即可读，见 controller ruling） */
+.transport-tally-delta { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+
 .transport-tally-popover {
   position: absolute;
   top: calc(100% + 8px);

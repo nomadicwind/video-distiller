@@ -98,3 +98,26 @@
 }
 .statusbar-center b { color: var(--text-2); font-weight: 600; }
 .statusbar-sep { color: var(--border); }
+
+/* ---------- HotkeyOverlay (spec §4/§8#7, full-screen mask) ---------- */
+/* rgba(0,0,0,.6) 遮罩为 spec 明定的字面量，非令牌遗漏（同 draw.ts 气泡黑白）。 */
+.hotkey-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.hotkey-mask-inner { max-width: min(640px, calc(100vw - 48px)); }
+.hotkey-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+  grid-auto-flow: column;
+  grid-template-rows: repeat(5, auto);
+  gap: 2px 32px;
+}
+.hotkey-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.hotkey-keys { display: flex; align-items: center; gap: 4px; flex-shrink: 0; min-width: 72px; }
+.hotkey-label { color: var(--text-2); font-size: 12px; }

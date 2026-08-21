@@ -17,7 +17,7 @@ function ChordPreview({ value }: { value: string }): JSX.Element {
         <span key={i} className="chord-group">
           {combo.split('+').map((k, ki, arr) => (
             <Fragment key={ki}>
-              <Keycap label={k} />
+              <Keycap label={k} inert />
               {ki < arr.length - 1 && <span className="chord-sep">+</span>}
             </Fragment>
           ))}

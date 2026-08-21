@@ -17,6 +17,7 @@ import { KeymapPage } from './pages/KeymapPage'
 import { PlaybooksPage } from './pages/PlaybooksPage'
 import { PlaybookEditor } from './pages/PlaybookEditor'
 import { ExecPage } from './pages/ExecPage'
+import { HotkeyOverlay } from './shell/HotkeyOverlay'
 import { StatusBar } from './shell/StatusBar'
 import { TopBar } from './shell/TopBar'
 import type { NavPage } from './shell/TopBar'
@@ -257,6 +258,7 @@ export default function App() {
         context={video ? <WorkbenchTopContext onBack={() => setVideo(null)} /> : undefined} />
       {content}
       <ErrorBar />
+      <HotkeyOverlay />
     </>
   )
 }

@@ -105,6 +105,11 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .keycap:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Display-only keycap (ChordPreview/HotkeyOverlay, no onClick): reads as a
+   static label rather than an inert-but-still-hoverable button. */
+.keycap-inert { cursor: default; }
+.keycap-inert:hover { background: var(--bg-control); }
+.keycap-inert:active { transform: none; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 0 rgba(0, 0, 0, 0.45); }
 
 /* ---------- Tabs ---------- */
 .tabs {

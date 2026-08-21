@@ -54,9 +54,10 @@ export function useHotkeys(video: Video): void {
         // 浏览器默认把 Home 当作"滚动到页面顶部"处理，需要显式拦截。
         e.preventDefault()
         seekMs(0)
-      } else if (e.key === '?') {
-        st.toggleHotkeys()
       }
+      // '?' 打开快捷键浮层由 shell/HotkeyOverlay.tsx 自带的全局监听处理——
+      // 该浮层不受 Workbench 挂载与否影响（资料库页也要能打开），若这里也
+      // 处理同一个按键，Workbench 内会被两个监听器各触发一次，开了又关。
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

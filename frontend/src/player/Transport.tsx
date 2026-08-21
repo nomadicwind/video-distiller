@@ -18,12 +18,9 @@ type BackfillField = 'anim_ms' | 'cast_ms' | 'cd_ms'
  * backfill row (skill select + field select + 回填 button + confirmation),
  * now living in a Card that pops out from the transport's tally count.
  */
-function TallyBackfillPopover({ deltaText }: { deltaText: string | null }): JSX.Element {
+function TallyBackfillPopover({ deltaText, lastGap }: { deltaText: string | null; lastGap: number | null }): JSX.Element {
   const s = useSession()
   const tally = s.analysis?.tally ?? []
-  const lastGap = tally.length >= 2
-    ? tally[tally.length - 1].t_ms - tally[tally.length - 2].t_ms
-    : null
 
   const [skills, setSkills] = useState<Skill[]>([])
   const [backfillSkill, setBackfillSkill] = useState('')
@@ -86,6 +83,14 @@ export function Transport({ video }: { video: Video }): JSX.Element {
   const tally = s.analysis?.tally ?? []
   const prevMark = take ? [...take.marks].reverse().find(m => m.t_ms <= playheadMs) : undefined
   const deltaText = prevMark ? `${Math.round(playheadMs - prevMark.t_ms)}ms` : null
+  const lastGap = tally.length >= 2 ? tally[tally.length - 1].t_ms - tally[tally.length - 2].t_ms : null
+  // Controller ruling (T3 review): showing Δ/interval only inside the
+  // backfill popover cost an extra click during the tally rhythm — surface
+  // the same numbers inline next to the count so they're visible at a glance.
+  const tallyInline = [
+    deltaText ? `Δ上一标记 ${deltaText}` : null,
+    lastGap !== null ? `间隔 ${lastGap}ms` : null,
+  ].filter(Boolean).join(' · ') || null
 
   const [playing, setPlaying] = useState(false)
   const [rate, setRate] = useState(1)
@@ -175,9 +180,10 @@ export function Transport({ video }: { video: Video }): JSX.Element {
           {tally.length}
         </button>
         <Button variant="ghost" size="sm" onClick={() => void clearTally()}>清空</Button>
+        {tallyInline && <span className="transport-tally-delta mono">{tallyInline}</span>}
         {tallyOpen && (
           <div className="transport-tally-popover">
-            <TallyBackfillPopover deltaText={deltaText} />
+            <TallyBackfillPopover deltaText={deltaText} lastGap={lastGap} />
           </div>
         )}
       </div>

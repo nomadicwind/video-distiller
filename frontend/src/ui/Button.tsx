@@ -20,12 +20,18 @@ export function Button(props: {
     icon && !children ? 'btn-icon-only' : '',
   ].filter(Boolean).join(' ')
 
+  // Icon-only button: the tooltip text is the only human-readable label,
+  // so it must also reach assistive tech via aria-label (a bare icon glyph
+  // has no accessible name otherwise).
+  const ariaLabel = tip && icon && !children ? tip : undefined
+
   const button = (
     <button
       type="button"
       className={classes}
       disabled={disabled}
       aria-pressed={active}
+      aria-label={ariaLabel}
       onClick={onClick}
     >
       {icon ? <span className="btn-icon-glyph">{icon}</span> : null}

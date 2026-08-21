@@ -37,3 +37,24 @@
 - **新导出后端**：`plan`（注入计划 JSON）与 `razer`（Synapse 宏 XML；格式未经官方验证，导入由用户在 Windows 验证）。
 - **屏幕采集**：`/api/capture/start|stop`，停止后自动 CFR 入库（Windows ddagrab / macOS avfoundation）。
 - **Windows 真机注入未在本机验证**（macOS 开发环境）；MockHost 覆盖全链路测试。
+
+## M5 · UI/UX 升级
+
+对标剪映专业版（CapCut Desktop，深色专业剪辑三区布局）、辅以 DaVinci Resolve 的时间轴密度与吸附语义，把工作台从"能用"升级到"专业剪辑器手感"——设计规格见 `docs/superpowers/specs/2026-08-21-ui-ux-upgrade.md`。
+
+十项修复摘要（详见规格 §8）：
+
+| # | 路径 | 修复前 | 修复后 |
+|---|---|---|---|
+| 1 | 选轨 | 高亮仅 11px 标签变色 | 沟槽条 + 行底色 + 卡片态三重高亮，Inspector 轨道卡同步 |
+| 2 | 打点定位 | 需 `[` `]` 逐帧逼近，点时间轴不动播放头 | 标尺/轨道点击与拖动即 seek + 悬停幽灵线 + 帧吸附 |
+| 3 | 打点入口 | 键帽区无说明，录入模式藏在长文案 checkbox | 键帽标题"在播放头处打点" + Switch + 状态栏模式提示 |
+| 4 | 移动标记 | 仅 `,` `.` 键 ±10ms，不可拖 | 拖动标记 + 吸附 + 实时 Δ（打表旁常显，无需展开弹层） |
+| 5 | holding | 10px 画布 checkbox 难点中 | Δ 药丸整体为开关（≥18px 热区） |
+| 6 | 缩放 | 仅 Ctrl+滚轮，无提示 | 工具栏缩放控件 + 适配全长按钮 + 快捷键提示 |
+| 7 | 快捷键发现 | 无任何提示面 | 按钮 tooltip 标注快捷键 + StatusBar 精简条 + `?` 完整浮层 |
+| 8 | 提案噪声 | 原始错误 JSON 整段进卡片 | 错误折叠为 warn Badge + tooltip 详情 |
+| 9 | 全局导航 | 每页自带返回/按钮堆 | TopBar 常驻导航，不再逐页维护返回逻辑 |
+| 10 | 状态可见性 | 转码中仅文字 status | Badge + 卡片进度态；执行台进度条 |
+
+两条原始抱怨路径的前后对比截图（选轨可见性、点击对齐打点）：`docs/screenshots/m5-before-workbench.png`（升级前）/ `docs/screenshots/m5-after-workbench.png`（升级后）。

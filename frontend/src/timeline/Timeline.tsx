@@ -96,6 +96,31 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
 
   const dragStateRef = useRef<DragState>(null)
 
+  // 容器尺寸变化（窗口缩放、面板分割拖动等）→ 立即重排画布（T7 遗留：挂载瞬
+  // 间的初始尺寸短暂 150px、窗口缩放不重排，两任评审均见）。观察父元素而非
+  // canvas 本身，因为下面的绘制 effect 正是靠 canvas.parentElement.clientWidth
+  // 取内容宽度的。这里只需触发一次重渲染让该 effect（无依赖数组，每次渲染都
+  // 跑）重新读取当前宽度——用一个从不被读取的计数器即可，state 本身不携带
+  // 尺寸值。rAF 节流合并同一帧内的多次 ResizeObserver 回调，避免抖动。
+  const [, setResizeTick] = useState(0)
+  useEffect(() => {
+    const el = canvasRef.current?.parentElement
+    if (!el) return
+    let raf: number | null = null
+    const ro = new ResizeObserver(() => {
+      if (raf != null) return
+      raf = requestAnimationFrame(() => {
+        raf = null
+        setResizeTick(t => t + 1)
+      })
+    })
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      if (raf != null) cancelAnimationFrame(raf)
+    }
+  }, [])
+
   // 播放头出视口 → 自动跟随
   useEffect(() => {
     if (s.playheadMs < viewport.startMs || s.playheadMs > viewport.endMs) {
