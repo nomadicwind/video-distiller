@@ -58,3 +58,27 @@
 | 10 | 状态可见性 | 转码中仅文字 status | Badge + 卡片进度态；执行台进度条 |
 
 两条原始抱怨路径的前后对比截图（选轨可见性、点击对齐打点）：`docs/screenshots/m5-before-workbench.png`（升级前）/ `docs/screenshots/m5-after-workbench.png`（升级后）。
+
+## LLM 后端
+
+工作台推断功能（循环命名、方案编排）依赖 LLM 后端。支持三种形态，按优先级自动探测或通过 `VD_LLM` 显式覆盖。
+
+| 形态 | 配置方式 | 依赖 | 备注 |
+|---|---|---|---|
+| **API 模式** | `ANTHROPIC_API_KEY` 环境变量 | Anthropic API 密钥 | 生产推荐；调用走 API 不需本机 claude |
+| **本机 CLI 模式** | 安装并登录 `claude` CLI | `claude` 命令行工具 + 订阅额度 | 免去 API 密钥配置；每次调用有秒级延迟（claude CLI 启动时间） |
+| **无后端降级** | 不配置任何后端 | 无 | 循环名称默认为「未命名循环」；方案编排单段输出确定性兜底 |
+
+**后端解析顺序**：
+1. `VD_LLM` 环境变量（若设置）：`VD_LLM=api` 强制 API 模式、`VD_LLM=claude-cli` 强制 CLI 模式、`VD_LLM=off` 禁用 LLM
+2. 自动探测（VD_LLM 未设置）：检查 `ANTHROPIC_API_KEY` 存在 → API 模式；否则检查 `claude` 在 PATH → CLI 模式；都无 → 降级模式
+
+**CLI 模式使用前提**：
+- 本机已安装 claude CLI（参考 [Anthropic Claude CLI 文档](https://github.com/anthropics/anthropic-cli)）
+- 已执行 `claude auth login` 并登录 Anthropic 账户
+- 订阅额度允许调用（走用户已登录的订阅配额，非 API 密钥调用）
+- 工作台每次命名/编排调用会启动 claude 进程（秒级延迟在正常范围，单次调用 120 秒超时）
+
+**CI/自动化环境**：
+- 后端探测不影响测试运行（测试显式注入 mock client，绝不发起真实 LLM 调用）
+- CI 环境需主动设置 `VD_LLM=off` 以禁用后端探测，或配置 `ANTHROPIC_API_KEY` 且网络可用
