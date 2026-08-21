@@ -198,6 +198,36 @@ canvas { display: block; }
   overflow: auto;
 }
 
+/* ---------- ExecPage (spec §7: 目标选择 + 控制条 + 状态 + 日志 + 回灌) ---------- */
+.exec-target-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.exec-target-row .field { min-width: 180px; }
+.exec-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.exec-status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.exec-status-count { color: var(--text-2); font-size: 12px; }
+.exec-progress { margin-top: 2px; }
+.exec-error-text { margin: 0; color: var(--danger); font-size: 12px; word-break: break-word; }
+.exec-warn-list { display: flex; flex-direction: column; gap: 4px; }
+.exec-warn-item { margin: 0; color: var(--warn); font-size: 12px; }
+.exec-backfeed-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.exec-backfeed-row .field { min-width: 220px; }
+
+/* 日志：深内嵌底、mono 11px、限高 280 滚动（新行自动滚底由组件内 ref 处理） */
+.log-view {
+  margin: 0;
+  padding: 10px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-m);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---------- Workbench (spec §5) ---------- */
 .topbar-context-name {
   color: var(--text-1);
