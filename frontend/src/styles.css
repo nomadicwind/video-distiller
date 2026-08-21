@@ -405,6 +405,12 @@ canvas { display: block; }
 /* L0：标题行 + Keycap 网格（4 列）+ 空标记宽键帽 + 录入模式 Switch */
 .entry-l0 { display: flex; flex-direction: column; gap: 10px; }
 .entry-section-title { font-size: 12px; color: var(--text-2); }
+/* M8 任务 2：标题后缀提示——点亮修饰键可组合出 'Ctrl+Alt+A' 这样的 label，
+   比正文更弱化，呼应 .switch-hint 的 11px/text-3 分级。 */
+.entry-section-hint { margin-left: 4px; font-size: 11px; color: var(--text-3); }
+/* M8 任务 2：Ctrl/Alt/Shift 粘滞修饰键 chip 行，位于键帽网格上方，独立一行
+   横排（不是网格的一部分，宽度按内容自适应，故不复用 .keycap-grid）。 */
+.keycap-modifier-row { display: flex; gap: 6px; }
 .keycap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .keycap-grid .keycap { width: 100%; }
 

@@ -1,4 +1,4 @@
-export function Keycap({ label, onClick, wide, inert, pressed }: {
+export function Keycap({ label, onClick, wide, inert, pressed, armed }: {
   label: string
   onClick?: () => void
   wide?: boolean
@@ -11,11 +11,18 @@ export function Keycap({ label, onClick, wide, inert, pressed }: {
    * 键盘打点根本没碰这枚 DOM 元素也能看到反馈。
    */
   pressed?: boolean
+  /**
+   * M8 任务 2：面板 Ctrl/Alt/Shift 修饰 chip 的粘滞点亮态——EntryPanel 的
+   * 本地 armed 状态驱动，持续到某个基键键帽消费它为止（不像 `pressed` 那样
+   * 120ms 自动摘除）。视觉上也要与 `pressed` 区分：这是静态高亮，不做下沉
+   * 位移，所以两者可以同时出现在同一枚 chip 上互不冲突（见 .keycap-armed）。
+   */
+  armed?: boolean
 }): JSX.Element {
   return (
     <button
       type="button"
-      className={`keycap${wide ? ' keycap-wide' : ''}${inert ? ' keycap-inert' : ''}${pressed ? ' keycap-pressed' : ''}`}
+      className={`keycap${wide ? ' keycap-wide' : ''}${inert ? ' keycap-inert' : ''}${pressed ? ' keycap-pressed' : ''}${armed ? ' keycap-armed' : ''}`}
       tabIndex={inert ? -1 : undefined}
       onClick={onClick}
     >

@@ -118,6 +118,15 @@
   border-color: var(--accent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
+/* M8 任务 2：面板 Ctrl/Alt/Shift 修饰 chip 的粘滞点亮态（EntryPanel 本地
+   armed 状态驱动，直到某个基键键帽消费它才熄灭）——用 accent 描边 + 底色
+   区分于 .keycap-pressed 的"按下去"下沉手感，因为 armed 是持续状态而非
+   瞬时反馈，二者可以在同一枚 chip 上叠加（键盘打 chord 时的短暂 flash）。 */
+.keycap-armed {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
 /* ---------- Tabs ---------- */
 .tabs {
