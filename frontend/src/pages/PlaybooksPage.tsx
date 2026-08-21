@@ -52,7 +52,6 @@ export function PlaybooksPage({ onBack, onEdit }: {
 
   const saveRename = async (id: string, value: string) => {
     const name = value.trim()
-    setEditingId(null)
     if (!name) return
     await api.patchRotation(id, { name })
     await refreshRotations()
@@ -82,21 +81,36 @@ export function PlaybooksPage({ onBack, onEdit }: {
                         autoFocus
                         defaultValue={r.name}
                         onKeyDown={e => {
-                          if (e.key === 'Enter') { e.currentTarget.blur() } else if (e.key === 'Escape') {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur()
+                          } else if (e.key === 'Escape') {
+                            // Route Escape through the same blur() path as Enter/click-away
+                            // instead of closing via setEditingId(null) directly: unmounting
+                            // the input as a side effect of a state update does NOT reliably
+                            // fire a delegated onBlur in React, so a flag set here could get
+                            // stuck true and silently swallow the next row's save. Explicitly
+                            // blurring first guarantees onBlur runs synchronously and consumes
+                            // the flag before anything unmounts.
                             cancelingRef.current = true
-                            setEditingId(null)
+                            e.currentTarget.blur()
                           }
                         }}
                         onBlur={e => {
-                          if (cancelingRef.current) { cancelingRef.current = false; return }
-                          void saveRename(r.id, e.currentTarget.value)
+                          // Always close on blur; only the save is conditional. Consuming
+                          // the flag here (read + reset in one step) means it can never
+                          // leak into a later, unrelated edit session.
+                          const canceled = cancelingRef.current
+                          cancelingRef.current = false
+                          const value = e.currentTarget.value
+                          setEditingId(null)
+                          if (!canceled) void saveRename(r.id, value)
                         }}
                       />
                     ) : (
                       <span className="pb-name-cell">
                         {r.name}
                         <Button variant="icon" size="sm" tip="重命名" icon={<Pencil />}
-                          onClick={() => setEditingId(r.id)} />
+                          onClick={() => { cancelingRef.current = false; setEditingId(r.id) }} />
                       </span>
                     )}
                   </td>
