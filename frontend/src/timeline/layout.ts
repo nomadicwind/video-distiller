@@ -83,8 +83,14 @@ const NICE_STEPS = [1, 2, 5]
  * Picks a "nice" major tick interval (1-2-5 × 10^n series, n>=0) such that the
  * resulting major-tick pixel spacing is at least 80px, choosing the smallest
  * such interval. minorMs is always majorMs/5.
+ *
+ * Guards against non-positive or NaN inputs (e.g. a 0×0 mount-time transient
+ * before layout/resize has produced real measurements): falls back to a sane
+ * default of majorMs=1000/minorMs=200 rather than looping forever or
+ * returning Infinity.
  */
 export const niceTickInterval = (spanMs: number, widthPx: number): { majorMs: number; minorMs: number } => {
+  if (!(spanMs > 0) || !(widthPx > 0)) return { majorMs: 1000, minorMs: 200 }
   const threshold = (80 * spanMs) / widthPx
   let majorMs = NICE_STEPS[0]
   for (let exp = 0; ; exp++) {
@@ -108,6 +114,9 @@ export const niceTickInterval = (spanMs: number, widthPx: number): { majorMs: nu
  * (frame = 1000/fps), then — if any magnet (mark/keyframe timestamp) lies
  * within tolPx pixels of that frame-rounded position — snaps to the magnet
  * instead.
+ *
+ * Note: does NOT clamp rawMs to [0, duration] — callers (tasks 5-6) are
+ * responsible for clamping before/after calling this.
  */
 export const snapMs = (
   rawMs: number, fps: number, magnets: number[], v: Viewport, tolPx = 6,

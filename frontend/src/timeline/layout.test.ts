@@ -64,6 +64,23 @@ describe('niceTickInterval', () => {
   it('minor is major/5', () => {
     expect(niceTickInterval(10_000, 800).minorMs).toBe(200)
   })
+  it('falls back to a sane default for degenerate 0x0 input instead of looping forever', () => {
+    // threshold = 80*0/0 = NaN; the guard must catch this before the loop runs.
+    // The test completing (returning) at all is the termination proof.
+    expect(niceTickInterval(0, 0)).toEqual({ majorMs: 1000, minorMs: 200 })
+  })
+  it('returns finite values when widthPx is 0', () => {
+    // threshold = 80*10000/0 = Infinity; guard catches widthPx<=0 before the loop.
+    const r = niceTickInterval(10_000, 0)
+    expect(Number.isFinite(r.majorMs)).toBe(true)
+    expect(Number.isFinite(r.minorMs)).toBe(true)
+  })
+  it('returns finite values when spanMs is negative', () => {
+    // threshold = 80*-5/800 = -0.5; guard catches spanMs<=0 before the loop.
+    const r = niceTickInterval(-5, 800)
+    expect(Number.isFinite(r.majorMs)).toBe(true)
+    expect(Number.isFinite(r.minorMs)).toBe(true)
+  })
 })
 
 describe('snapMs', () => {
