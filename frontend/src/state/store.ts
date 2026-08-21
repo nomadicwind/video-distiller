@@ -94,6 +94,11 @@ export const useSession = create<Session>((set, get) => ({
     // any undo/redo history from before this belongs to marks/takes that
     // don't exist in the new tree, so it must not survive the switch.
     clearUndoHistory()
+    // hintText (e.g. "入点须在出点之前") is per-video transient feedback too —
+    // and its setTimeout must be cancelled here, not just the field cleared,
+    // or a hint scheduled just before the switch would still land ~3s later
+    // and clear whatever the new video's own hint set in the meantime.
+    if (hintTimer) { clearTimeout(hintTimer); hintTimer = null }
     set({
       analysis: a, laneId: lane?.id ?? null, takeId: take?.id ?? null, selectedMarkId: null,
       // A-B loop marks are per-video too — carrying them into a different
@@ -104,7 +109,7 @@ export const useSession = create<Session>((set, get) => ({
       // flashMarks likewise references markIds from THIS tree — a stale
       // entry pointing at an id that no longer exists is harmless (draw.ts's
       // findMark just skips it) but pointless to carry across a video switch.
-      lastEntry: null, flashMarks: {},
+      lastEntry: null, flashMarks: {}, hintText: null,
     })
   },
   // Clears the per-video session window. `entryMode` is intentionally left
@@ -112,10 +117,13 @@ export const useSession = create<Session>((set, get) => ({
   // switching videos shouldn't silently drop the annotator out of it.
   clearAnalysis: () => {
     clearUndoHistory()
+    // Same reasoning as setAnalysis above: cancel the pending hint timer, not
+    // just the field, so a stale hint can't reappear ~3s after the clear.
+    if (hintTimer) { clearTimeout(hintTimer); hintTimer = null }
     set({
       analysis: null, laneId: null, takeId: null, selectedMarkId: null,
       playheadMs: 0, showAggregate: false, abLoop: emptyAbLoop(),
-      lastEntry: null, flashMarks: {},
+      lastEntry: null, flashMarks: {}, hintText: null,
     })
   },
   // 换泳道也隐含换 take（见下方 takeId 赋值）—— lastEntry 同样要归零，理由

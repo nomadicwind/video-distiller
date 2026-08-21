@@ -24,6 +24,38 @@ function cancelAudition(): void {
   pendingAudition = null
 }
 
+/** Shape Player() reads off useSession().abLoop — kept minimal (just the
+ * fields decidePlayheadAction needs) so this stays a pure function testable
+ * without the store. */
+export type AbLoopSnapshot = { on: boolean; aMs: number | null; bMs: number | null }
+
+/**
+ * Pure per-tick decision for onPlayheadUpdate below (M7 final review fix):
+ * while an audition is pending, it — a one-shot explicit "play this bit"
+ * intent — WINS over the ambient AB loop for the whole audition window, even
+ * when that window (tMs ± 400ms) crosses past B. Loop enforcement is only
+ * even considered once there is no pending audition; when the audition ends
+ * (auto-pause here, or a manual cancel via seekMs/frameStep/togglePlay), the
+ * loop resumes enforcing on the next tick as normal.
+ *
+ * Previously the loop check ran first and its seekMs() call cancelled the
+ * pending audition as a side effect whenever the window crossed B, so the
+ * promised auto-pause silently never happened — see final review report.
+ */
+export function decidePlayheadAction(
+  ms: number,
+  abLoop: AbLoopSnapshot,
+  pendingAuditionEndMs: number | null,
+): 'loop-seek' | 'audition-pause' | null {
+  if (pendingAuditionEndMs != null) {
+    return ms >= pendingAuditionEndMs ? 'audition-pause' : null
+  }
+  if (abLoop.on && abLoop.aMs != null && abLoop.bMs != null && ms > abLoop.bMs) {
+    return 'loop-seek'
+  }
+  return null
+}
+
 export function frameStep(dir: 1 | -1, fps: number, durationMs: number): void {
   cancelAudition()
   const v = videoEl()
@@ -96,12 +128,12 @@ export function Player({ video }: { video: Video }): JSX.Element {
     const onPlayheadUpdate = (ms: number) => {
       setPlayhead(ms)
       const { abLoop } = useSession.getState()
-      if (abLoop.on && abLoop.aMs != null && abLoop.bMs != null && ms > abLoop.bMs) {
-        seekMs(abLoop.aMs)
-      }
-      if (pendingAudition && ms >= pendingAudition.endMs) {
+      const action = decidePlayheadAction(ms, abLoop, pendingAudition?.endMs ?? null)
+      if (action === 'audition-pause') {
         v.pause()
         pendingAudition = null
+      } else if (action === 'loop-seek' && abLoop.aMs != null) {
+        seekMs(abLoop.aMs)
       }
     }
     const loop = (_now: number, meta: VideoFrameCallbackMetadata) => {
