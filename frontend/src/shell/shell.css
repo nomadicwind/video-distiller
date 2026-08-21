@@ -78,7 +78,7 @@
   border-top: 1px solid var(--border);
   color: var(--text-3);
   font-size: 11px;
-  flex-shrink: 0;
+  flex-shrink: 0; /* fixed footer row inside .workbench's column flex — never squeezed */
 }
 .statusbar-left, .statusbar-right {
   flex: 1;

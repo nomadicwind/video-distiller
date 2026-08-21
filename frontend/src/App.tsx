@@ -25,8 +25,26 @@ import { Card } from './ui/Card'
 import { Field } from './ui/Field'
 import { Badge } from './ui/Badge'
 import { EmptyState } from './ui/EmptyState'
+import { Tabs } from './ui/Tabs'
 import { Tooltip } from './ui/Tooltip'
 import { fmtTc } from './time/frames'
+
+type InspectorTab = 'annotate' | 'infer'
+const INSPECTOR_TABS: { key: InspectorTab; label: string }[] = [
+  { key: 'annotate', label: '标注' },
+  { key: 'infer', label: '推断' },
+]
+
+/** Inspector 容器（spec §5.2）：标注/推断页签，局部状态，默认标注。 */
+function Inspector(): JSX.Element {
+  const [tab, setTab] = useState<InspectorTab>('annotate')
+  return (
+    <>
+      <Tabs tabs={INSPECTOR_TABS} active={tab} onChange={k => setTab(k as InspectorTab)} />
+      {tab === 'annotate' ? <EntryPanel /> : <InferPanel />}
+    </>
+  )
+}
 
 /**
  * TopBar's context slot while the Workbench is open: ← 返回 + analysis name
@@ -115,8 +133,7 @@ function Workbench({ video }: { video: Video }) {
           <ThumbStrip video={video} />
         </div>
         <div className="workbench-pane workbench-inspector">
-          <EntryPanel />
-          <InferPanel />
+          <Inspector />
         </div>
         <div className="workbench-pane workbench-timeline">
           <Timeline video={video} aggregate={aggregate} />

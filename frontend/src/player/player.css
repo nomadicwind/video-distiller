@@ -1,6 +1,14 @@
 /* player.css — Monitor + Transport visual rules (spec §5/§5.1). Tokens only. */
 
 /* ---------- Monitor ---------- */
+/*
+ * No vh-based cap here on purpose: the Workbench frame (styles.css) makes
+ * row 1 (this pane) the grid's only flexible track, so the monitor's real
+ * available height is whatever that track computes to at the current
+ * viewport — a fixed vh cap would either strand extra blank space above the
+ * timeline or (on a short viewport) push the timeline off-screen, which is
+ * exactly the bug this component's height:100% is fixing.
+ */
 .monitor {
   background: var(--bg-inset);
   border-radius: var(--radius-m);
@@ -9,7 +17,8 @@
   justify-content: center;
   overflow: hidden;
   width: 100%;
-  max-height: 60vh;
+  height: 100%;
+  min-height: 0;
 }
 .monitor video {
   width: 100%;

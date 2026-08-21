@@ -93,18 +93,31 @@ canvas { display: block; }
 }
 .topbar-context select { max-width: 220px; }
 
+/*
+ * Commercial editors keep the timeline permanently visible — no page scroll,
+ * ever. .workbench is therefore pinned to exactly the viewport height minus
+ * the global TopBar (48px, shell.css .topbar) and clips any residual
+ * overflow; its own StatusBar footer (24px, shell.css .statusbar) is a fixed
+ * flex child so the grid below it (.workbench-grid, flex: 1) always gets
+ * "the rest" — never more, never less.
+ */
 .workbench {
   display: flex;
   flex-direction: column;
+  height: calc(100vh - 48px);
   min-height: 0;
+  overflow: hidden;
 }
 
 .workbench-grid {
   display: grid;
   grid-template-columns: 1fr 320px;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
   gap: 1px;
   background: var(--bg-app);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .workbench-pane { background: var(--bg-panel); }
@@ -118,15 +131,23 @@ canvas { display: block; }
  * intrinsic-sizing pass and inflates it (and, since the timeline spans both
  * columns, that inflation compounds into the whole grid). min-width:0 caps
  * each pane's contribution at the grid's actual assigned track size.
+ *
+ * min-height: 0 on workbench-monitor is the vertical equivalent, now that
+ * row 1 is the grid's only flexible track (minmax(0, 1fr)): without it, the
+ * monitor's content (an aspect-ratio'd box) would feed its intrinsic height
+ * back into the row's sizing pass instead of shrinking to whatever the row
+ * actually computes to — which is precisely the "monitor shrinks first, the
+ * timeline never gets pushed off-screen" behavior this frame relies on.
  */
-.workbench-monitor { grid-column: 1; grid-row: 1; padding: 12px 12px 8px; min-width: 0; }
+.workbench-monitor { grid-column: 1; grid-row: 1; padding: 12px 12px 8px; min-width: 0; min-height: 0; }
 .workbench-transport { grid-column: 1; grid-row: 2; padding: 0 12px 8px; min-width: 0; }
 /*
- * row3 is the grid's only 1fr track, so whenever the inspector column (which
- * spans rows 1-3) needs more height than the monitor+transport+strip stack
- * naturally does, ALL of that slack lands here. Bottom-align the actual
- * 56px strip so any such slack reads as breathing room above it rather than
- * a dead gap between the strip and the timeline immediately below.
+ * Row 1 (monitor) is the grid's only flexible track — it absorbs whatever
+ * space transport/strip/timeline don't need and shrinks first on a short
+ * viewport, so rows 2-4 (all auto-sized off real content) and the timeline
+ * in particular always stay fully visible. The strip keeps a fixed content
+ * height; bottom-align it within its row so any leftover slack reads as
+ * breathing room above it rather than a dead gap before the timeline.
  */
 .workbench-strip {
   grid-column: 1; grid-row: 3; padding: 0 12px 12px; min-width: 0; min-height: 0;
@@ -139,6 +160,9 @@ canvas { display: block; }
   overflow-y: auto;
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .workbench-timeline {
   grid-column: 1 / -1;
@@ -148,6 +172,79 @@ canvas { display: block; }
   display: flex;
   flex-direction: column;
 }
+
+/* ---------- Inspector / EntryPanel (spec §5.2) ---------- */
+.entry-panel { display: flex; flex-direction: column; gap: 16px; }
+
+/* 轨道卡：三张横排 mini-card — 轨道色左边条 + accent 边框/底色（选中态） */
+.lane-cards { display: flex; gap: 8px; }
+.lane-card {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-m);
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+.lane-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--lane-color);
+}
+.lane-card:hover { background: var(--bg-control-hover); }
+.lane-card.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-1);
+}
+.lane-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lane-card-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.lane-card-name { font-size: 13px; font-weight: 600; color: inherit; }
+.lane-card-sub { font-size: 11px; color: var(--text-3); }
+
+/* Take 段：chip 行 + 新 Take ghost + 聚合 Switch */
+.take-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.take-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.take-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.take-chip:hover { background: var(--bg-control-hover); }
+.take-chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--text-1); }
+.take-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* L0：标题行 + Keycap 网格（4 列）+ 空标记宽键帽 + 录入模式 Switch */
+.entry-l0 { display: flex; flex-direction: column; gap: 10px; }
+.entry-section-title { font-size: 12px; color: var(--text-2); }
+.keycap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.keycap-grid .keycap { width: 100%; }
+
+/* L1/L2：技能名 Field + datalist + 插入 */
+.skill-input-row { display: flex; gap: 8px; }
+.skill-input-row input { flex: 1; }
 
 /* ---------- Timeline toolbar (spec §6.1: 28px, 吸附/模式提示 左 · 缩放/适配 右) ---------- */
 .tl-toolbar {
