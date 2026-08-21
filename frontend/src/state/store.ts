@@ -44,8 +44,14 @@ export interface Session {
   toggleAggregate: () => void
   toggleSnap: () => void
   toggleHotkeys: () => void
-  setLoopA: (ms: number | null) => void
-  setLoopB: (ms: number | null) => void
+  /** Sets/clears the loop-in point. Returns false (state unchanged) when a
+   * bMs already exists and `ms` would land at or after it — callers surface
+   * that as a hint rather than allowing an inverted A>=B range. Passing
+   * null always clears and always succeeds. */
+  setLoopA: (ms: number | null) => boolean
+  /** Mirrors setLoopA: rejects (returns false, unchanged) an `ms` at or
+   * before an existing aMs. */
+  setLoopB: (ms: number | null) => boolean
   toggleLoop: () => void
   clearLoop: () => void
   setHintText: (text: string | null) => void
@@ -143,15 +149,36 @@ export const useSession = create<Session>((set, get) => ({
   toggleAggregate: () => set(s => ({ showAggregate: !s.showAggregate })),
   toggleSnap: () => set(s => ({ snapOn: !s.snapOn })),
   toggleHotkeys: () => set(s => ({ showHotkeys: !s.showHotkeys })),
-  setLoopA: ms => set(s => ({ abLoop: { ...s.abLoop, aMs: ms } })),
-  setLoopB: ms => set(s => ({ abLoop: { ...s.abLoop, bMs: ms } })),
-  // Only meaningful once both endpoints exist — a stray `on: true` with a
-  // null endpoint would make Player's loop-check compare against null.
-  toggleLoop: () => set(s => (
-    s.abLoop.aMs != null && s.abLoop.bMs != null
-      ? { abLoop: { ...s.abLoop, on: !s.abLoop.on } }
-      : {}
-  )),
+  // Ordering guard lives HERE (not in hotkeys.ts) so both entry points —
+  // the I/O hotkeys today, anything else calling these later — are safe by
+  // construction: it's impossible to reach an inverted A>=B range through
+  // these setters, which is what let Player's loop-check spin forever
+  // (round 1 review: L on + A set after an existing earlier B pinned
+  // playback at A==B with no escape, since ms>bMs was permanently true).
+  setLoopA: ms => {
+    if (ms == null) { set(s => ({ abLoop: { ...s.abLoop, aMs: null } })); return true }
+    const { bMs } = get().abLoop
+    if (bMs != null && ms >= bMs) return false
+    set(s => ({ abLoop: { ...s.abLoop, aMs: ms } }))
+    return true
+  },
+  setLoopB: ms => {
+    if (ms == null) { set(s => ({ abLoop: { ...s.abLoop, bMs: null } })); return true }
+    const { aMs } = get().abLoop
+    if (aMs != null && ms <= aMs) return false
+    set(s => ({ abLoop: { ...s.abLoop, bMs: ms } }))
+    return true
+  },
+  // Only meaningful once both endpoints exist AND are correctly ordered —
+  // belt-and-braces alongside the setters above (defensive: even if some
+  // future path ever set an inverted pair directly, toggleLoop itself still
+  // refuses to arm the loop). Turning OFF is always allowed, no ordering
+  // check needed.
+  toggleLoop: () => set(s => {
+    if (s.abLoop.on) return { abLoop: { ...s.abLoop, on: false } }
+    const canEnable = s.abLoop.aMs != null && s.abLoop.bMs != null && s.abLoop.aMs < s.abLoop.bMs
+    return canEnable ? { abLoop: { ...s.abLoop, on: true } } : {}
+  }),
   clearLoop: () => set({ abLoop: emptyAbLoop() }),
   setHintText: text => {
     if (hintTimer) { clearTimeout(hintTimer); hintTimer = null }

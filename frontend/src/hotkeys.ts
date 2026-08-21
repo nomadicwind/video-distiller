@@ -82,18 +82,22 @@ export function useHotkeys(video: Video): void {
         // the key is held down (autorepeat), unlike frame-step's [ / ].
         if (e.repeat) return
         const rounded = clampMs(frameRound(st.playheadMs, fps), durationMs)
-        // 同点再按清除（brief §要点）：新值等于已设值则视为"取消"。
-        st.setLoopA(st.abLoop.aMs === rounded ? null : rounded)
+        if (st.abLoop.aMs === rounded) {
+          // 同点再按清除（brief §要点）：新值等于已设值则视为"取消"。
+          st.setLoopA(null)
+        } else if (!st.setLoopA(rounded)) {
+          // a>=b 无效（round 1 review：否则 L 打开后播放会在 A==B 处卡死）
+          // —— store 的 setLoopA 拒绝并原样返回 false，这里只负责给提示。
+          st.setHintText('入点须在出点之前')
+        }
       } else if (e.key === 'o' || e.key === 'O') {
         if (e.repeat) return
         const rounded = clampMs(frameRound(st.playheadMs, fps), durationMs)
         if (st.abLoop.bMs === rounded) {
           st.setLoopB(null)
-        } else if (st.abLoop.aMs != null && rounded <= st.abLoop.aMs) {
+        } else if (!st.setLoopB(rounded)) {
           // b<=a 无效：忽略设置，复用 StatusBar 左侧提示位给出瞬时反馈。
           st.setHintText('出点须在入点之后')
-        } else {
-          st.setLoopB(rounded)
         }
       } else if (e.key.toLowerCase() === 'l') {
         if (e.repeat) return

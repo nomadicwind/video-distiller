@@ -101,6 +101,55 @@ test('setLoopA/setLoopB set independent endpoints', () => {
   expect(useSession.getState().abLoop).toEqual({ aMs: 1000, bMs: 3000, on: false })
 })
 
+// Round 1 review: I (setLoopA) had no ordering guard, so setting A at/after
+// an existing B produced an inverted range that froze playback (Player's
+// loop-check re-seeks to A every frame since ms>bMs is permanently true).
+// The guard now lives in the store so every entry point is safe by
+// construction, not just the hotkeys.ts I/O branches.
+test('setLoopA rejects a>=b when a bMs already exists, leaving state unchanged', () => {
+  const s = useSession.getState()
+  s.setLoopB(2000)
+  expect(s.setLoopA(2000)).toBe(false) // a === b: still invalid, not just a > b
+  expect(useSession.getState().abLoop).toEqual({ aMs: null, bMs: 2000, on: false })
+  expect(s.setLoopA(5000)).toBe(false) // a > b
+  expect(useSession.getState().abLoop).toEqual({ aMs: null, bMs: 2000, on: false })
+  expect(s.setLoopA(1000)).toBe(true) // a < b: valid
+  expect(useSession.getState().abLoop.aMs).toBe(1000)
+})
+
+test('setLoopB rejects b<=a when an aMs already exists, leaving state unchanged', () => {
+  const s = useSession.getState()
+  s.setLoopA(2000)
+  expect(s.setLoopB(2000)).toBe(false)
+  expect(useSession.getState().abLoop).toEqual({ aMs: 2000, bMs: null, on: false })
+  expect(s.setLoopB(500)).toBe(false)
+  expect(useSession.getState().abLoop).toEqual({ aMs: 2000, bMs: null, on: false })
+  expect(s.setLoopB(3000)).toBe(true)
+  expect(useSession.getState().abLoop.bMs).toBe(3000)
+})
+
+test('setLoopA/setLoopB always accept null (clear), even with the other endpoint set', () => {
+  const s = useSession.getState()
+  s.setLoopA(1000)
+  s.setLoopB(3000)
+  expect(s.setLoopA(null)).toBe(true)
+  expect(useSession.getState().abLoop.aMs).toBeNull()
+})
+
+// Defensive/belt-and-braces (round 1 review): even though the setters above
+// make an inverted range unreachable through normal use, toggleLoop refuses
+// to arm the loop if it's ever handed one anyway (e.g. a forced setState in
+// a test, or a future code path that bypasses the setters).
+test('toggleLoop refuses to turn on an inverted (aMs>=bMs) range', () => {
+  useSession.setState({ abLoop: { aMs: 5000, bMs: 2000, on: false } })
+  useSession.getState().toggleLoop()
+  expect(useSession.getState().abLoop.on).toBe(false)
+  // Turning off, though, is always allowed even from a (forced) inverted+on state.
+  useSession.setState({ abLoop: { aMs: 5000, bMs: 2000, on: true } })
+  useSession.getState().toggleLoop()
+  expect(useSession.getState().abLoop.on).toBe(false)
+})
+
 test('toggleLoop only takes effect once both endpoints are set', () => {
   const s = useSession.getState()
   s.setLoopA(1000)
