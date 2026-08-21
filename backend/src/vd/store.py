@@ -123,9 +123,39 @@ def _validate_mark(t_ms, end_ms, kind, label):
         raise ValueError("release mark must not carry label")
 
 
+def _take_frame_ms(conn, take_id) -> int:
+    """take→lane→analysis→video 联表取 fps（NULL 或查无→默认 30），返回一帧时长（ms）。"""
+    row = conn.execute(
+        "SELECT v.fps AS fps FROM takes t"
+        " JOIN lanes l ON t.lane_id = l.id"
+        " JOIN analyses a ON l.analysis_id = a.id"
+        " JOIN videos v ON a.video_id = v.id"
+        " WHERE t.id = ?",
+        (take_id,),
+    ).fetchone()
+    fps = row["fps"] if row and row["fps"] else 30
+    return round(1000 / fps)
+
+
+def _check_min_gap(conn, take_id, t_ms, exclude_id=None):
+    """同一 take 内是否存在与 t_ms 相距小于一帧的其它标记；有则拒绝（同一帧内视为冲突）。"""
+    frame = _take_frame_ms(conn, take_id)
+    row = conn.execute(
+        "SELECT 1 FROM marks WHERE take_id=? AND id != ? AND ABS(t_ms - ?) < ? LIMIT 1",
+        (take_id, exclude_id or "", t_ms, frame),
+    ).fetchone()
+    if row is not None:
+        raise ValueError("与相邻标记距离过近（同一帧内）")
+
+
 def insert_mark(conn, take_id, *, t_ms, kind, label=None, end_ms=None,
                 provenance="human_manual"):
     _validate_mark(t_ms, end_ms, kind, label)
+    # execution_log 回灌的真实执行日志可能合法地共享同一帧（例如和弦：多个按键
+    # 在同一 t_ms 触发），豁免最小间距校验；人工标注（包括对 execution_log
+    # 标记的编辑，见 update_mark）仍须遵守。
+    if provenance != "execution_log":
+        _check_min_gap(conn, take_id, t_ms)
     mid = _id("mk")
     conn.execute(
         "INSERT INTO marks(id,take_id,t_ms,end_ms,kind,label,provenance)"
@@ -142,6 +172,10 @@ def update_mark(conn, mark_id, **fields):
         raise ValueError("mark not found")
     merged = {**cur, **fields}
     _validate_mark(merged["t_ms"], merged["end_ms"], merged["kind"], merged["label"])
+    if "t_ms" in fields:
+        # 移动标记（含把 execution_log 标记挪去别处）视为人工编辑，一律校验，
+        # 不看原 provenance——正因为如此下面会把 provenance 改成 human_edited。
+        _check_min_gap(conn, cur["take_id"], fields["t_ms"], exclude_id=mark_id)
     keys = ",".join(f"{k}=?" for k in fields)
     conn.execute(
         f"UPDATE marks SET {keys}, provenance='human_edited' WHERE id=?",
