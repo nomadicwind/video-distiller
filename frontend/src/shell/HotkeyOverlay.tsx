@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { isTextEntryTarget } from '../hotkeys'
 import { useSession } from '../state/store'
 import { Card } from '../ui/Card'
 import { Keycap } from '../ui/Keycap'
@@ -24,6 +25,13 @@ const HOTKEYS: { keys: string[]; label: string }[] = [
  *
  * '?' 的处理只在这一处：hotkeys.ts 的 useHotkeys 特意不再响应 '?'，否则
  * Workbench 内会被两个监听器各触发一次、开了又关（见 hotkeys.ts 注释）。
+ *
+ * 焦点分流（code review fix）：'?' 走 isTextEntryTarget 守卫——聚焦在真正
+ * 的文本输入框时（如资料库的 B 站 URL 框，`?p=2` 这类查询串很常见）必须让
+ * 字符正常输入，不能既吞掉字符又弹出浮层。Escape 则不受此守卫：浮层是模态
+ * 遮罩，即便焦点恰好落在某个输入框里，按 Escape 也该照样把它关掉——这与
+ * "文本框里单键字母不触发快捷键"是两条不同的规则，前者关乎"会打字"，后者
+ * 关乎"关闭一个正盖在整个页面上的模态"。
  */
 export function HotkeyOverlay(): JSX.Element | null {
   const show = useSession(s => s.showHotkeys)
@@ -31,10 +39,12 @@ export function HotkeyOverlay(): JSX.Element | null {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === '?') {
+      if (e.key === 'Escape') {
+        if (useSession.getState().showHotkeys) toggleHotkeys()
+        return
+      }
+      if (e.key === '?' && !isTextEntryTarget(e.target)) {
         e.preventDefault()
-        toggleHotkeys()
-      } else if (e.key === 'Escape' && useSession.getState().showHotkeys) {
         toggleHotkeys()
       }
     }

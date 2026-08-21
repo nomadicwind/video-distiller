@@ -4,19 +4,29 @@ import type { Video } from './api/types'
 import { frameStep, seekMs, videoEl } from './player/Player'
 import { useSession } from './state/store'
 
+/**
+ * Only genuine text-entry targets swallow single-key hotkeys entirely
+ * (typing '?' in the B站 URL box, digits in a "keymap id" field, etc. must
+ * reach the field, not fire a shortcut). Radio/checkbox/button/range/file
+ * inputs (e.g. the lane radios and the entry-mode checkbox in EntryPanel)
+ * are NOT text entry — focusing one must not kill every hotkey until the
+ * user clicks elsewhere. Shared by useHotkeys and HotkeyOverlay's global
+ * '?' listener (code review: HotkeyOverlay had no guard, so '?' typed into
+ * a plain input both lost the character and popped the overlay open).
+ */
+export function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.tagName === 'TEXTAREA') return true
+  return target instanceof HTMLInputElement
+    && !['radio', 'checkbox', 'button', 'range', 'file'].includes(target.type)
+}
+
 export function useHotkeys(video: Video): void {
   const fps = video.fps ?? 30
   const durationMs = video.duration_ms ?? 0
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Only genuine text-entry targets swallow hotkeys. Radio/checkbox/
-      // button/range/file inputs (e.g. the lane radios and the entry-mode
-      // checkbox in EntryPanel) must not — focusing one shouldn't kill
-      // every hotkey until the user clicks elsewhere.
-      const target = e.target as HTMLElement
-      if (target.tagName === 'TEXTAREA') return
-      if (target instanceof HTMLInputElement
-          && !['radio', 'checkbox', 'button', 'range', 'file'].includes(target.type)) return
+      if (isTextEntryTarget(e.target)) return
       const st = useSession.getState()
       const lane = st.analysis?.lanes.find(l => l.id === st.laneId)
       if (st.entryMode && lane?.layer === 'L0' && /^[a-z0-9]$/i.test(e.key)) {
