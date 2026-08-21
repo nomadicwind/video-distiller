@@ -7,7 +7,7 @@
 ### 五层体系
 
 **Operation（操作，L0）**:
-单个输入动作（tap / hold / chord / wheel / wait）。视频里看不见键盘，L0 是分析师基于键位知识做的**推断**。
+单个输入动作（tap / hold / chord / wheel / wait）。视频里看不见键盘，L0 是分析师基于键位知识做的**推断**。**L0 标记只能来自人工标注或执行日志回灌（provenance=execution_log）；从视频画面推断按键序列被明确禁止（用户裁定 2026-08-21，spec §13.2）。**
 _Avoid_: 按键事件（那是 L0 的事件流表示，见 Event）
 
 **Skill（技能，L1）**:
