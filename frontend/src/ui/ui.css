@@ -294,6 +294,31 @@
   transition-delay: 400ms;
 }
 
+/* ---------- Table (spec §7: 技能目录/键位设置页统一表格样式) ---------- */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table thead th {
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.table tbody td {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-1);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr:hover { background: var(--bg-elevated); }
+.table tbody tr.is-clickable { cursor: pointer; }
+
 /* ---------- EmptyState ---------- */
 .empty-state {
   display: flex;
