@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { AnalysisTree, Mark, Take, Tally } from '../api/types'
+import { clearUndoHistory } from './undo'
 
 export interface Session {
   analysis: AnalysisTree | null
@@ -51,15 +52,22 @@ export const useSession = create<Session>((set, get) => ({
   setAnalysis: a => {
     const lane = a.lanes[0] ?? null
     const take = lane ? lane.takes[lane.takes.length - 1] : null
+    // A new analysis tree means a different (or freshly reloaded) video —
+    // any undo/redo history from before this belongs to marks/takes that
+    // don't exist in the new tree, so it must not survive the switch.
+    clearUndoHistory()
     set({ analysis: a, laneId: lane?.id ?? null, takeId: take?.id ?? null, selectedMarkId: null })
   },
   // Clears the per-video session window. `entryMode` is intentionally left
   // untouched — it's a persistent UI preference, not video-scoped state, so
   // switching videos shouldn't silently drop the annotator out of it.
-  clearAnalysis: () => set({
-    analysis: null, laneId: null, takeId: null, selectedMarkId: null,
-    playheadMs: 0, showAggregate: false,
-  }),
+  clearAnalysis: () => {
+    clearUndoHistory()
+    set({
+      analysis: null, laneId: null, takeId: null, selectedMarkId: null,
+      playheadMs: 0, showAggregate: false,
+    })
+  },
   selectLane: laneId => {
     const lane = get().analysis?.lanes.find(l => l.id === laneId)
     const take = lane?.takes[lane.takes.length - 1]

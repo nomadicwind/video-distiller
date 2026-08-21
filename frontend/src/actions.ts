@@ -2,7 +2,7 @@ import { api } from './api/client'
 import type { Mark, Take } from './api/types'
 import { currentTake, useSession } from './state/store'
 import { pushUndo } from './state/undo'
-import type { HoldPatch } from './state/undo'
+import type { HoldPatch, HolderSnapshot } from './state/undo'
 
 /**
  * Commits `mark`'s t_ms to `newTMs` (PATCH + local store update). A previous
@@ -53,10 +53,13 @@ export async function deleteSelected(): Promise<void> {
   if (!mark || !take) return
   // Same orphan-hold hazard as nudgeSelected: if a previous mark holds
   // until the mark being deleted, clear its end_ms first so it doesn't
-  // point at a t_ms that no longer belongs to any mark.
-  const holder = take.marks.find(m => m.id !== mark.id && m.end_ms === mark.t_ms) ?? null
-  if (holder) {
-    const updatedHolder = await api.patchMark(holder.id, { clear_end: true })
+  // point at a t_ms that no longer belongs to any mark. Its prior end_ms is
+  // captured into the undo entry so undoing the delete can restore the hold.
+  const holderMark = take.marks.find(m => m.id !== mark.id && m.end_ms === mark.t_ms) ?? null
+  let holder: HolderSnapshot | undefined
+  if (holderMark) {
+    holder = { markId: holderMark.id, endMs: holderMark.end_ms as number }
+    const updatedHolder = await api.patchMark(holderMark.id, { clear_end: true })
     useSession.getState().updateMarkLocal(updatedHolder)
   }
   await api.deleteMark(mark.id)
@@ -64,6 +67,7 @@ export async function deleteSelected(): Promise<void> {
   pushUndo({
     kind: 'delete', takeId: take.id, markId: mark.id,
     snapshot: { t_ms: mark.t_ms, end_ms: mark.end_ms, kind: mark.kind, label: mark.label },
+    holder,
   })
 }
 

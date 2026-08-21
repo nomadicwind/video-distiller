@@ -132,6 +132,10 @@ test('undo stack caps at 100 entries, dropping the oldest', async () => {
   }
   expect(successes).toBe(100)
   expect(await undo()).toBe(false)
+  // Positively confirm the oldest entry (i=0, fromTMs=0) was evicted, not
+  // merely that the count landed at 100 by coincidence: its distinctive
+  // patchMark call must never have fired among the 100 undos above.
+  expect(api.patchMark).not.toHaveBeenCalledWith('m1', { t_ms: 0 })
 })
 
 test('delete -> undo reinsert rewrites the old mark id to the new id across both stacks', async () => {
@@ -151,4 +155,92 @@ test('delete -> undo reinsert rewrites the old mark id to the new id across both
   expect(await undo()).toBe(true) // now undoes the rewritten move entry
   expect(api.patchMark).toHaveBeenCalledWith('mk_new', { t_ms: 50 })
   expect(api.patchMark).not.toHaveBeenCalledWith('m1', expect.anything())
+})
+
+test('id rewrite also reaches a stale entry sitting in the REDO stack', async () => {
+  // Build up: insert m1, then move it, then undo the move (parking a 'move'
+  // entry on the redo stack), then undo the insert too (deleting m1, which
+  // pushes a 'delete' entry onto the redo stack above the parked move).
+  pushUndo({ kind: 'insert', markId: 'm1' })
+  pushUndo({ kind: 'move', markId: 'm1', fromTMs: 50, toTMs: 100 })
+
+  expect(await undo()).toBe(true) // undoes the move -> redo stack: [move(m1)]
+  expect(await undo()).toBe(true) // undoes the insert (deletes m1) -> redo stack: [move(m1), delete(m1)]
+
+  expect(await redo()).toBe(true) // redoes the delete -> reinserts as 'mk_new'; must rewrite the parked move(m1) too
+  // The first undo() already patched m1's t_ms down to 50 (the move's
+  // fromTMs), so that's the live value the second undo() (of the insert)
+  // snapshots before deleting it.
+  expect(api.newMark).toHaveBeenCalledWith('tk_a', { t_ms: 50, kind: 'input', label: '2', end_ms: null })
+
+  vi.clearAllMocks()
+  expect(await redo()).toBe(true) // redoes the (rewritten) move entry
+  expect(api.patchMark).toHaveBeenCalledWith('mk_new', { t_ms: 100 })
+  expect(api.patchMark).not.toHaveBeenCalledWith('m1', expect.anything())
+})
+
+test('delete entry with a holder: undo restores BOTH the reinserted mark and the holder end_ms; redo re-clears it', async () => {
+  const withHold: AnalysisTree = structuredClone(tree)
+  withHold.lanes[0].takes[0].marks = [
+    { id: 'm1', take_id: 'tk_a', t_ms: 50, end_ms: 100, kind: 'input', label: '2', provenance: 'human_manual', confidence: 1 },
+    { id: 'm2', take_id: 'tk_a', t_ms: 100, end_ms: null, kind: 'input', label: '3', provenance: 'human_manual', confidence: 1 },
+  ]
+  useSession.getState().setAnalysis(withHold)
+
+  // Mirrors deleteSelected(): m1 holds until m2 (m1.end_ms === m2.t_ms), so
+  // deleting m2 clears m1's hold first — both mutations must be captured.
+  useSession.getState().updateMarkLocal({ ...withHold.lanes[0].takes[0].marks[0], end_ms: null })
+  useSession.getState().removeMarkLocal('m2')
+  pushUndo({
+    kind: 'delete', takeId: 'tk_a', markId: 'm2',
+    snapshot: { t_ms: 100, end_ms: null, kind: 'input', label: '3' },
+    holder: { markId: 'm1', endMs: 100 },
+  })
+
+  expect(await undo()).toBe(true)
+  expect(api.newMark).toHaveBeenCalledWith('tk_a', { t_ms: 100, kind: 'input', label: '3', end_ms: null })
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { end_ms: 100 })
+  const afterUndo = useSession.getState().analysis!.lanes[0].takes[0].marks
+  expect(afterUndo.some(m => m.id === 'mk_new')).toBe(true)
+  expect(afterUndo.find(m => m.id === 'm1')!.end_ms).toBe(100)
+
+  vi.clearAllMocks()
+  expect(await redo()).toBe(true)
+  expect(api.deleteMark).toHaveBeenCalledWith('mk_new')
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { clear_end: true })
+})
+
+test('undo of insert/holding no-ops safely when the mark is missing from the current analysis (no api calls fire)', async () => {
+  pushUndo({ kind: 'insert', markId: 'ghost' })
+  expect(await undo()).toBe(true) // stack wasn't empty, but there was nothing to act on
+  expect(api.deleteMark).not.toHaveBeenCalled()
+
+  pushUndo({ kind: 'holding', markId: 'ghost', patch: { end_ms: 400 }, inverse: { clear_end: true } })
+  expect(await undo()).toBe(true)
+  expect(api.patchMark).not.toHaveBeenCalled()
+})
+
+test('switching to a different analysis clears both stacks', async () => {
+  pushUndo({ kind: 'move', markId: 'm1', fromTMs: 100, toTMs: 110 })
+  await undo() // populate the redo stack too, to prove both get cleared
+
+  useSession.getState().setAnalysis({ ...structuredClone(tree), id: 'an_2' })
+
+  expect(await undo()).toBe(false)
+  expect(await redo()).toBe(false)
+})
+
+test('clearing the analysis also clears both stacks', async () => {
+  pushUndo({ kind: 'move', markId: 'm1', fromTMs: 100, toTMs: 110 })
+  useSession.getState().clearAnalysis()
+  expect(await undo()).toBe(false)
+})
+
+test('concurrent undo() calls are serialized: the overlapping call no-ops while the first is in flight', async () => {
+  pushUndo({ kind: 'move', markId: 'm1', fromTMs: 100, toTMs: 110 })
+  pushUndo({ kind: 'move', markId: 'm1', fromTMs: 50, toTMs: 100 })
+
+  const [r1, r2] = await Promise.all([undo(), undo()])
+  expect([r1, r2].sort()).toEqual([false, true])
+  expect(api.patchMark).toHaveBeenCalledTimes(1)
 })

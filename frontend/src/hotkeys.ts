@@ -34,6 +34,7 @@ export function useHotkeys(video: Video): void {
       // browser's own undo — hence preventDefault regardless of stack state.
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
+        if (e.repeat) return // ignore key-autorepeat from a held-down combo
         if (e.shiftKey) void redo()
         else void undo()
         return
