@@ -215,4 +215,76 @@ test('setHintText restarts the 3s countdown when called again before it elapses'
   }
 })
 
+// M7 任务 3: toggleRefLines / flashMarks / lastEntry.
+
+test('toggleRefLines flips refLinesOn (default false)', () => {
+  expect(useSession.getState().refLinesOn).toBe(false)
+  useSession.getState().toggleRefLines()
+  expect(useSession.getState().refLinesOn).toBe(true)
+  useSession.getState().toggleRefLines()
+  expect(useSession.getState().refLinesOn).toBe(false)
+})
+
+test('insertMarkLocal stamps flashMarks with bornAt and lazily prunes entries older than 1s', () => {
+  vi.useFakeTimers()
+  try {
+    vi.setSystemTime(0)
+    const s = useSession.getState()
+    s.selectTake('tk_a')
+    s.insertMarkLocal(mark('m1', 100))
+    expect(useSession.getState().flashMarks).toEqual({ m1: 0 })
+
+    vi.setSystemTime(500)
+    s.insertMarkLocal(mark('m2', 200))
+    // m1 is only 500ms old here — still inside the 1s window, so it must survive this prune pass.
+    expect(useSession.getState().flashMarks).toEqual({ m1: 0, m2: 500 })
+
+    vi.setSystemTime(1600)
+    s.insertMarkLocal(mark('m3', 300))
+    // m1 (1600ms old) and m2 (1100ms old) are both past the 1s window now; only the fresh m3 remains.
+    expect(useSession.getState().flashMarks).toEqual({ m3: 1600 })
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('recordEntry increments a per-take counter on lastEntry, independent of label', () => {
+  const s = useSession.getState()
+  s.selectTake('tk_a')
+  expect(useSession.getState().lastEntry).toBeNull()
+  s.recordEntry('Q')
+  expect(useSession.getState().lastEntry).toEqual({ label: 'Q', count: 1 })
+  s.recordEntry('W') // a different label still bumps the same running count
+  expect(useSession.getState().lastEntry).toEqual({ label: 'W', count: 2 })
+})
+
+// Brief §要点: "count = 当前 take 本会话插入计数...切 take 归零" — every path
+// that changes which take is "current" must reset lastEntry back to null so
+// the next recordEntry starts counting from 1 again, not carry over a count
+// that belongs to a take/video no longer in view.
+test('lastEntry resets to null on selectTake/selectLane/addTakeLocal/setAnalysis/clearAnalysis', () => {
+  const s = useSession.getState()
+  s.selectTake('tk_a')
+  s.recordEntry('Q')
+  s.selectTake('tk_b')
+  expect(useSession.getState().lastEntry).toBeNull()
+
+  s.recordEntry('W')
+  s.selectLane('ln_1')
+  expect(useSession.getState().lastEntry).toBeNull()
+
+  s.selectLane('ln_0')
+  s.recordEntry('E')
+  s.addTakeLocal('ln_0', { id: 'tk_new', idx: 3, marks: [] })
+  expect(useSession.getState().lastEntry).toBeNull()
+
+  s.recordEntry('R')
+  s.setAnalysis(structuredClone(tree))
+  expect(useSession.getState().lastEntry).toBeNull()
+
+  s.recordEntry('F')
+  s.clearAnalysis()
+  expect(useSession.getState().lastEntry).toBeNull()
+})
+
 afterEach(() => useSession.getState().setHintText(null))

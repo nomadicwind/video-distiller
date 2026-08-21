@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { insertAtPlayhead } from '../actions'
 import { api } from '../api/client'
 import type { Lane } from '../api/types'
@@ -21,6 +21,21 @@ export function EntryPanel() {
   const s = useSession()
   const [skillName, setSkillName] = useState('')
   const lane = s.analysis?.lanes.find(l => l.id === s.laneId)
+
+  // 键帽 120ms 按压态（M7 任务 3）：由 store 的 lastEntry 驱动 —— 只在录入
+  // 模式下物理键盘打点时更新（见 hotkeys.ts），给这类"鼠标没碰这枚键帽"的
+  // 输入方式补一个看得见的反馈。effect 依赖 lastEntry 这个对象本身（每次
+  // recordEntry 都会产生一个新引用，哪怕 label 相同），所以即使连续两次
+  // 打同一个键，也会重新触发一轮 120ms 按压，而不是被 React 认为"没变化"
+  // 而跳过。
+  const [pressedLabel, setPressedLabel] = useState<string | null>(null)
+  useEffect(() => {
+    if (!s.lastEntry) return
+    setPressedLabel(s.lastEntry.label)
+    const t = setTimeout(() => setPressedLabel(null), 120)
+    return () => clearTimeout(t)
+  }, [s.lastEntry])
+
   if (!s.analysis || !lane) return null
 
   const usedLabels = [...new Set(
@@ -77,7 +92,8 @@ export function EntryPanel() {
           <div className="entry-section-title">在播放头处打点</div>
           <div className="keycap-grid">
             {L0_KEYS.map(k => (
-              <Keycap key={k} label={k} onClick={() => void insertAtPlayhead('input', k)} />
+              <Keycap key={k} label={k} pressed={pressedLabel === k}
+                onClick={() => void insertAtPlayhead('input', k)} />
             ))}
           </div>
           <Keycap label="空标记" wide onClick={() => void insertAtPlayhead('release', null)} />

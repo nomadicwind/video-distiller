@@ -47,8 +47,17 @@ export function useHotkeys(video: Video): void {
         // (only while the current lane is L0 — other lanes don't render
         // the entry-mode panel/exit checkbox, so interception there would
         // trap the user with no way to turn it off from that lane)
+        // (this is also why R's ref-lines toggle below never fires while
+        // entry mode + L0 are both active: R matches /^[a-z0-9]$/i and gets
+        // claimed here first, same as every other L0_KEYS letter/digit.)
         e.preventDefault()
-        void insertAtPlayhead('input', e.key.toUpperCase())
+        const label = e.key.toUpperCase()
+        void insertAtPlayhead('input', label).then(() => {
+          // 打点成功后才记 —— 鼠标点击 EntryPanel 里的键帽走的是另一条路径
+          // （直接调用 insertAtPlayhead），不经过这里，所以不会驱动
+          // lastEntry；这是有意的，见 store.ts recordEntry 的注释。
+          useSession.getState().recordEntry(label)
+        })
         return
       }
       if (e.key === ' ') {
@@ -72,6 +81,13 @@ export function useHotkeys(video: Video): void {
         st.toggleAggregate()
       } else if (e.key === 's' || e.key === 'S') {
         st.toggleSnap()
+      } else if (e.key === 'r' || e.key === 'R') {
+        // e.repeat guard: a one-shot toggle, not something to spam while the
+        // key is held (same reasoning as I/O/L/P below). The entry-mode+L0
+        // branch above already claims 'r'/'R' first when both are active —
+        // see its comment — so this only ever fires otherwise.
+        if (e.repeat) return
+        st.toggleRefLines()
       } else if (e.key === 'Home') {
         // 浏览器默认把 Home 当作"滚动到页面顶部"处理，需要显式拦截。
         e.preventDefault()

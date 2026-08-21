@@ -26,6 +26,8 @@ export const HOTKEYS: HotkeyRow[] = [
   { keys: ['E'], label: '录入模式', statusbar: true, statusbarLabel: '录入' },
   { keys: ['A'], label: '聚合' },
   { keys: ['S'], label: '吸附' },
+  // M7 任务 3：跨层参考线（仅展示 L1 当前 take 的标记位置，不产生数据）。
+  { keys: ['R'], label: 'L1 参考线（仅展示）' },
   { keys: ['Home'], label: '跳开头' },
   // M7 任务 2：A-B 区间循环 + 试听。
   { keys: ['I'], label: '设入点 A（同点再按清除）' },

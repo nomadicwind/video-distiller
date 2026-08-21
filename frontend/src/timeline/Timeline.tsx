@@ -140,6 +140,19 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
       canvas.style.height = `${h}px`
       const ctx = canvas.getContext('2d')!
       ctx.scale(dpr, dpr)
+      // 跨层参考线（M7 任务 3）：取 L1 泳道"当前选中 take"——若该 take.id
+      // 与全局 s.takeId 匹配（即用户正选中 L1 泳道）就用它，否则退回 L1 的
+      // 最后一个 take（最近一次录制）。takeId 是全局单值，只在被选中的那条
+      // 泳道上才有意义，所以不能直接拿 s.takeId 去 L1 lane 里找——这里显式
+      // 处理"L1 未被选中"的情形。L1 没有任何 take 或没有标记时开关仍可用，
+      // 只是列表为空、draw.ts 自然不画线。
+      const refLines: number[] = (() => {
+        if (!s.refLinesOn) return []
+        const l1 = s.analysis!.lanes.find(l => l.layer === 'L1')
+        if (!l1 || l1.takes.length === 0) return []
+        const l1Take = l1.takes.find(t => t.id === s.takeId) ?? l1.takes[l1.takes.length - 1]
+        return l1Take.marks.map(m => m.t_ms)
+      })()
       draw(ctx, {
         lanes: s.analysis.lanes,
         currentLaneId: s.laneId,
@@ -154,8 +167,24 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
         snapOn: s.snapOn,
         scrubbing,
         abLoop: s.abLoop,
+        refLines,
+        flashMarks: s.flashMarks,
       })
     })
+    return () => cancelAnimationFrame(raf)
+  })
+
+  // 打点闪烁反馈期间持续重绘（M7 任务 3）：flashMarks 里的 bornAt 时间戳本
+  // 身不会随时间推移触发新的 store 变更，所以上面那个"每次渲染都重绘"的
+  // effect 不会在 300ms 窗口内自己反复跑——这里补一个哨兵 tick，只要还有
+  // 条目落在 300ms 内就再排一帧、bump 一次 state 触发重渲染（从而让上面那
+  // 个 effect 重新跑一遍，读到更新后的 progress），过期后自然停止。复用与
+  // ResizeObserver 那份相同的 rAF 节流写法。
+  const [, setFlashTick] = useState(0)
+  useEffect(() => {
+    const active = Object.values(s.flashMarks).some(bornAt => Date.now() - bornAt < 300)
+    if (!active) return
+    const raf = requestAnimationFrame(() => setFlashTick(t => t + 1))
     return () => cancelAnimationFrame(raf)
   })
 
@@ -361,6 +390,8 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
       <Toolbar
         snapOn={s.snapOn}
         onSnap={s.toggleSnap}
+        refLinesOn={s.refLinesOn}
+        onRefLines={s.toggleRefLines}
         viewport={viewport}
         durationMs={durationMs}
         onViewport={setViewport}

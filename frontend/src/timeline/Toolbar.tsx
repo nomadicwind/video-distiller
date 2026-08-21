@@ -1,4 +1,4 @@
-import { Magnet, Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
+import { Layers, Magnet, Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '../ui/Button'
 import type { Viewport } from './layout'
 
@@ -39,10 +39,12 @@ function withSpan(v: Viewport, newSpanMs: number, durationMs: number): Viewport 
 }
 
 export function Toolbar({
-  snapOn, onSnap, viewport, durationMs, onViewport,
+  snapOn, onSnap, refLinesOn, onRefLines, viewport, durationMs, onViewport,
 }: {
   snapOn: boolean
   onSnap: () => void
+  refLinesOn: boolean
+  onRefLines: () => void
   viewport: Viewport
   durationMs: number
   onViewport: (v: Viewport) => void
@@ -57,6 +59,8 @@ export function Toolbar({
     <div className="tl-toolbar">
       <div className="tl-toolbar-left">
         <Button variant="icon" size="sm" active={snapOn} tip="吸附 (S)" icon={<Magnet />} onClick={onSnap} />
+        <Button variant="icon" size="sm" active={refLinesOn}
+          tip="L1 参考线（仅显示，不产生数据）· R" icon={<Layers />} onClick={onRefLines} />
         <span className="tl-toolbar-hint">点击/拖动标尺定位 · 拖动标记吸附对齐 · 点击 Δ 药丸切换 holding · 滚轮平移 · ⌘/Ctrl+滚轮缩放</span>
       </div>
       <div className="tl-toolbar-right">

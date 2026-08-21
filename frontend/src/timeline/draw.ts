@@ -33,6 +33,21 @@ export interface TimelineData {
   scrubbing: boolean
   /** A-B 循环入/出点（M7 任务 2）：入/出点各自独立显示角标，区带需两者都设置。 */
   abLoop: AbLoop
+  /**
+   * 跨层参考线（M7 任务 3）：预计算好的 ms 列表，取自 L1 泳道"当前选中 take"
+   * 的各标记 t_ms（调用方 Timeline.tsx 已按 refLinesOn 开关决定是否给出非空
+   * 数组）。这里只负责渲染 —— 且只在 currentLaneId 指向的泳道恰好是 L0 时才
+   * 画（参考线的意义是给 L0 操作对齐 L1 技能窗口，画在其它泳道没有意义），
+   * 双重把关，任一侧忘记判断都不会误画。
+   */
+  refLines: number[]
+  /**
+   * 打点闪烁反馈（M7 任务 3）：markId → bornAt(ms epoch)，由 store 的
+   * insertMarkLocal 写入。进度 `(now-bornAt)/300` 驱动半径 8→5 与透明度
+   * 1→0 的插值；超过 300ms 的条目本函数直接跳过不画（真正从 record 里清掉
+   * 是 store 那边 1s 后的惰性剪枝，这里只是提前不渲染)。
+   */
+  flashMarks: Record<string, number>
 }
 
 export function timelineHeight(laneCount: number): number {
@@ -188,6 +203,30 @@ export function draw(ctx: CanvasRenderingContext2D, d: TimelineData): void {
     const midY = laneY + LANE_H / 2
     const color = theme.laneColors[lane.layer]
     const current = lane.takes.find(t => t.id === d.currentTakeId)
+
+    // 跨层参考线（M7 任务 3）：仅在这一行恰好是当前选中的 L0 泳道时画 ——
+    // 竖向虚线 + 顶部小三角，--lane-l1 30%，纯展示不参与命中测试。
+    if (lane.id === d.currentLaneId && lane.layer === 'L0' && d.refLines.length) {
+      ctx.save()
+      ctx.strokeStyle = withAlpha(theme.laneColors.L1, 0.3)
+      ctx.fillStyle = withAlpha(theme.laneColors.L1, 0.3)
+      ctx.setLineDash([4, 4])
+      ctx.lineWidth = 1
+      for (const tMs of d.refLines) {
+        const x = GUTTER_W + msToPx(v, tMs)
+        ctx.beginPath()
+        ctx.moveTo(hair(x), laneY)
+        ctx.lineTo(hair(x), laneY + LANE_H)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(x - 4, laneY)
+        ctx.lineTo(x + 4, laneY)
+        ctx.lineTo(x, laneY + 6)
+        ctx.closePath()
+        ctx.fill()
+      }
+      ctx.restore()
+    }
 
     // 聚合叠加：IQR 带 + 少数派竖条
     if (d.aggregate && lane.id === d.currentLaneId) {
@@ -348,6 +387,33 @@ export function draw(ctx: CanvasRenderingContext2D, d: TimelineData): void {
       ctx.fillText(text, previewX, py0 + ph / 2 + 0.5)
       ctx.textAlign = 'left'
     }
+  }
+
+  // 打点闪烁（M7 任务 3）：刚插入的标记短暂放大再收缩淡出，给键盘录入一个
+  // 看得见的"打上了"反馈。findMark 而非只看当前 take，是因为 flashMarks
+  // 里的条目最长可以滞留到 1s（store 惰性清理），跨这段时间用户完全可能已
+  // 经切换了 take/泳道——找不到就直接跳过，不强行画在别处。
+  const flashNow = Date.now()
+  for (const [markId, bornAt] of Object.entries(d.flashMarks)) {
+    const age = flashNow - bornAt
+    if (age >= 300) continue
+    const found = findMark(d.lanes, markId)
+    if (!found) continue
+    const { laneIdx, mark } = found
+    const flashLaneY = RULER_H + laneIdx * LANE_H
+    const flashMidY = flashLaneY + LANE_H / 2
+    const flashColor = theme.laneColors[d.lanes[laneIdx].layer]
+    const fx = GUTTER_W + msToPx(v, mark.t_ms)
+    const progress = Math.min(1, age / 300)
+    const radius = 8 - 3 * progress // 8 -> 5
+    const alpha = 1 - progress
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(fx, flashMidY, radius, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(flashColor, alpha)
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.restore()
   }
 
   ctx.restore()

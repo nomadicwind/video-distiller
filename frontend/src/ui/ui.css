@@ -110,6 +110,14 @@
 .keycap-inert { cursor: default; }
 .keycap-inert:hover { background: var(--bg-control); }
 .keycap-inert:active { transform: none; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 0 rgba(0, 0, 0, 0.45); }
+/* M7 任务 3：录入模式物理键盘打点时的按压反馈（store lastEntry 驱动，120ms
+   自动摘除，见 EntryPanel.tsx）——镜像 .keycap:active 的下沉手感，另加
+   accent 描边把它和鼠标真按住的普通 :active 状态区分开。 */
+.keycap-pressed {
+  transform: translateY(2px);
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
 
 /* ---------- Tabs ---------- */
 .tabs {
