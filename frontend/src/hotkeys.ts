@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { deleteSelected, insertAtPlayhead, nudgeSelected, tallyAtPlayhead } from './actions'
 import type { Video } from './api/types'
+import { composeEntryLabel } from './entry/chord'
 import { auditionMark, frameStep, seekMs, togglePlay } from './player/Player'
 import { currentTake, useSession } from './state/store'
 import { redo, undo } from './state/undo'
@@ -42,21 +43,28 @@ export function useHotkeys(video: Video): void {
       }
       const st = useSession.getState()
       const lane = st.analysis?.lanes.find(l => l.id === st.laneId)
-      if (st.entryMode && lane?.layer === 'L0' && /^[a-z0-9]$/i.test(e.key)) {
+      // composeEntryLabel is keyed off e.code (layout/modifier-independent),
+      // not e.key — the old /^[a-z0-9]$/i.test(e.key) predicate silently
+      // dropped e.g. Shift+2 because e.key reports the shifted glyph '@',
+      // which the regex doesn't match. Gating the call on entryMode/L0 first
+      // (rather than checking the label unconditionally) preserves the old
+      // short-circuit: this branch is skipped entirely outside entry mode.
+      const entryLabel = st.entryMode && lane?.layer === 'L0' ? composeEntryLabel(e) : null
+      if (entryLabel !== null) {
         // 录入模式下字母/数字优先作为 L0 打点，不再触发其他单键快捷键
         // (only while the current lane is L0 — other lanes don't render
         // the entry-mode panel/exit checkbox, so interception there would
         // trap the user with no way to turn it off from that lane)
         // (this is also why R's ref-lines toggle below never fires while
-        // entry mode + L0 are both active: R matches /^[a-z0-9]$/i and gets
-        // claimed here first, same as every other L0_KEYS letter/digit.)
+        // entry mode + L0 are both active: any Digit0-9/KeyA-Z code —
+        // including R — gets claimed here first, same as every other L0_KEYS
+        // letter/digit.)
         e.preventDefault()
-        const label = e.key.toUpperCase()
-        void insertAtPlayhead('input', label).then(() => {
+        void insertAtPlayhead('input', entryLabel).then(() => {
           // 打点成功后才记 —— 鼠标点击 EntryPanel 里的键帽走的是另一条路径
           // （直接调用 insertAtPlayhead），不经过这里，所以不会驱动
           // lastEntry；这是有意的，见 store.ts recordEntry 的注释。
-          useSession.getState().recordEntry(label)
+          useSession.getState().recordEntry(entryLabel)
         })
         return
       }
