@@ -40,7 +40,16 @@ export function Player({ video }: { video: Video }): JSX.Element {
       handle = v.requestVideoFrameCallback(loop)
     }
     handle = v.requestVideoFrameCallback(loop)
-    return () => v.cancelVideoFrameCallback(handle)
+    // rVFC 在部分内嵌 WebView/无合成器环境不产帧回调；seeked/timeupdate
+    // 兜底保证暂停态 seek 后播放头仍跟手（rVFC 可用时二者幂等）。
+    const sync = () => setPlayhead(v.currentTime * 1000)
+    v.addEventListener('seeked', sync)
+    v.addEventListener('timeupdate', sync)
+    return () => {
+      v.cancelVideoFrameCallback(handle)
+      v.removeEventListener('seeked', sync)
+      v.removeEventListener('timeupdate', sync)
+    }
   }, [setPlayhead, video.id])
 
   const ratio = video.width && video.height ? `${video.width} / ${video.height}` : '16 / 9'
