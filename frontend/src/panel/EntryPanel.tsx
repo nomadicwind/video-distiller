@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react'
 import { insertAtPlayhead } from '../actions'
 import { api } from '../api/client'
-import type { Lane } from '../api/types'
-import { useSession } from '../state/store'
-import { LANE_SUBTITLE } from '../timeline/draw'
-import { Badge } from '../ui/Badge'
+import { currentTake, useSession } from '../state/store'
 import { Button } from '../ui/Button'
 import { Field } from '../ui/Field'
 import { Keycap } from '../ui/Keycap'
 import { Switch } from '../ui/Switch'
+import { MarkList } from './MarkList'
 
 const L0_KEYS = ['1', '2', '3', '4', '5', 'Q', 'W', 'E', 'R', 'F', 'G', 'Tab', 'LMB', 'RMB', 'Wheel']
 
@@ -20,15 +18,11 @@ const L0_KEYS = ['1', '2', '3', '4', '5', 'Q', 'W', 'E', 'R', 'F', 'G', 'Tab', '
 const MODIFIERS = ['Ctrl', 'Alt', 'Shift'] as const
 type Modifier = (typeof MODIFIERS)[number]
 
-/** var() reference per layer — kept alongside LANE_SUBTITLE's Lane['layer'] keying so a new layer can't add one without the other. */
-const LANE_COLOR_VAR: Record<Lane['layer'], string> = {
-  L0: 'var(--lane-l0)', L1: 'var(--lane-l1)', L2: 'var(--lane-l2)',
-}
-
 export function EntryPanel() {
   const s = useSession()
   const [skillName, setSkillName] = useState('')
   const lane = s.analysis?.lanes.find(l => l.id === s.laneId)
+  const take = currentTake(s)
 
   // 键帽 120ms 按压态（M7 任务 3）：由 store 的 lastEntry 驱动 —— 只在录入
   // 模式下物理键盘打点时更新（见 hotkeys.ts），给这类"鼠标没碰这枚键帽"的
@@ -73,24 +67,9 @@ export function EntryPanel() {
 
   return (
     <div className="entry-panel">
-      {/* 轨道卡：与时间轴同一状态（s.laneId），点击任一侧都双向同步。 */}
-      <div className="lane-cards">
-        {s.analysis.lanes.map(l => (
-          <button
-            key={l.id}
-            type="button"
-            className={`lane-card${l.id === s.laneId ? ' is-selected' : ''}`}
-            style={{ '--lane-color': LANE_COLOR_VAR[l.layer] } as React.CSSProperties}
-            onClick={() => s.selectLane(l.id)}
-          >
-            <span className="lane-card-info">
-              <span className="lane-card-name">{l.layer}</span>
-              <span className="lane-card-sub">{LANE_SUBTITLE[l.layer]}</span>
-            </span>
-            <Badge kind={l.id === s.laneId ? 'accent' : 'neutral'}>{l.takes.length}</Badge>
-          </button>
-        ))}
-      </div>
+      {/* M9 任务 3：泳道卡整块移除——时间轴沟槽（Timeline 的轨道点击区）已经
+          承担了泳道选择与状态显示，这里再画一遍是纯重复。s.laneId 仍是双向
+          同步的单一状态源，只是选择的入口收敛到时间轴一侧。 */}
 
       {/* Take 段：chip 行 + 新 Take ghost + 聚合叠加 Switch（A 热键提示）。 */}
       <div className="take-row">
@@ -106,8 +85,8 @@ export function EntryPanel() {
             </button>
           ))}
           <Button variant="ghost" size="sm" onClick={async () => {
-            const take = await api.newTake(lane.id)
-            s.addTakeLocal(lane.id, take)
+            const created = await api.newTake(lane.id)
+            s.addTakeLocal(lane.id, created)
           }}>+ 新 Take</Button>
         </div>
         <Switch
@@ -169,6 +148,10 @@ export function EntryPanel() {
           </div>
         </Field>
       )}
+
+      {/* M9 任务 3：面板主体——当前泳道当前 take 的标记列表，占满剩余高度
+          自行滚动（.mark-list 的 flex:1/overflow-y:auto，见 styles.css）。 */}
+      <MarkList lane={lane} take={take} />
     </div>
   )
 }

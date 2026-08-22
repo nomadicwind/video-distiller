@@ -8,7 +8,12 @@ vi.mock('../api/client', () => ({
       Promise.resolve({
         id, take_id: 'tk_a', t_ms: (patch.t_ms as number) ?? 100,
         end_ms: patch.clear_end ? null : (patch.end_ms as number) ?? null,
-        kind: 'input', label: '2', provenance: 'human_edited', confidence: 1,
+        kind: 'input',
+        // 'label' in patch (not just `patch.label ?? '2'`) so an explicit
+        // `null` (relabel's inverse patching back to a mark whose original
+        // label was null) isn't mistaken for "not provided" and defaulted.
+        label: 'label' in patch ? (patch.label as string | null) : '2',
+        provenance: 'human_edited', confidence: 1,
       } satisfies Mark)),
     deleteMark: vi.fn(() => Promise.resolve({ ok: true })),
     newMark: vi.fn((takeId: string, m: Record<string, unknown>) =>
@@ -115,6 +120,28 @@ test('holding entry: undo applies the inverse patch, redo re-applies the origina
   expect(api.patchMark).toHaveBeenCalledWith('m1', { end_ms: 400 })
 })
 
+test('relabel entry: undo patches back to fromLabel, redo patches forward to toLabel', async () => {
+  pushUndo({ kind: 'relabel', markId: 'm1', fromLabel: '2', toLabel: 'Q' })
+
+  expect(await undo()).toBe(true)
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { label: '2' })
+  expect(useSession.getState().analysis!.lanes[0].takes[0].marks[0].label).toBe('2')
+
+  expect(await redo()).toBe(true)
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { label: 'Q' })
+  expect(useSession.getState().analysis!.lanes[0].takes[0].marks[0].label).toBe('Q')
+})
+
+// A release ('空标记') mark's original label is null — the inverse patch
+// must send an explicit `{ label: null }`, not silently skip the field.
+test('relabel entry: fromLabel of null patches back to null', async () => {
+  pushUndo({ kind: 'relabel', markId: 'm1', fromLabel: null, toLabel: 'Q' })
+
+  expect(await undo()).toBe(true)
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { label: null })
+  expect(useSession.getState().analysis!.lanes[0].takes[0].marks[0].label).toBeNull()
+})
+
 test('pushUndo clears the redo stack', async () => {
   pushUndo({ kind: 'move', markId: 'm1', fromTMs: 100, toTMs: 110 })
   await undo() // redo stack now holds one entry
@@ -216,6 +243,10 @@ test('undo of insert/holding no-ops safely when the mark is missing from the cur
   expect(api.deleteMark).not.toHaveBeenCalled()
 
   pushUndo({ kind: 'holding', markId: 'ghost', patch: { end_ms: 400 }, inverse: { clear_end: true } })
+  expect(await undo()).toBe(true)
+  expect(api.patchMark).not.toHaveBeenCalled()
+
+  pushUndo({ kind: 'relabel', markId: 'ghost', fromLabel: '2', toLabel: 'Q' })
   expect(await undo()).toBe(true)
   expect(api.patchMark).not.toHaveBeenCalled()
 })

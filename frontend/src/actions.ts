@@ -138,6 +138,32 @@ export async function insertAtPlayhead(
   }
 }
 
+/**
+ * Commits a label rename from MarkList's inline editor (task 3). Mirrors the
+ * other actions' "success-then-push" ordering (insertAtPlayhead et al.):
+ * pushUndo only runs after api.patchMark + updateMarkLocal have both
+ * succeeded, so a rejected PATCH (surfaced via api.ts's `j()` toast) never
+ * leaves a stale undo entry claiming a rename that didn't actually happen.
+ *
+ * `newLabel` is trimmed and treated as a no-op when it comes out empty or
+ * unchanged from the mark's current label — matching the brief's "空值/
+ * 未变 → no-op" (an accidental Enter/blur on an untouched or cleared field
+ * must not PATCH, and must not push a pointless undo entry).
+ */
+export async function relabelMark(markId: string, newLabel: string): Promise<void> {
+  const trimmed = newLabel.trim()
+  if (!trimmed) return
+  const s = useSession.getState()
+  const take = currentTake(s)
+  const mark = take?.marks.find(m => m.id === markId)
+  if (!mark) return
+  const fromLabel = mark.label
+  if (trimmed === fromLabel) return
+  const updated = await api.patchMark(markId, { label: trimmed })
+  useSession.getState().updateMarkLocal(updated)
+  pushUndo({ kind: 'relabel', markId, fromLabel, toLabel: trimmed })
+}
+
 export async function tallyAtPlayhead(): Promise<void> {
   const s = useSession.getState()
   if (!s.analysis) return

@@ -319,6 +319,15 @@ canvas { display: block; }
   grid-column: 1; grid-row: 3; padding: 0 12px 12px; min-width: 0; min-height: 0;
   display: flex; align-items: flex-end;
 }
+/*
+ * overflow-y: auto stays here as a fallback (InferPanel's own content isn't
+ * its own scroll container, so a very long proposal list still needs
+ * somewhere to scroll) — but for EntryPanel's annotate tab, M9 任务 3 makes
+ * .entry-panel a flex:1/min-height:0 child (below) so it's sized to exactly
+ * fill this pane's remaining space instead of growing past it; that in turn
+ * lets .mark-list be the one that actually scrolls (see below), so this
+ * outer scrollbar never engages for the annotate tab in practice.
+ */
 .workbench-inspector {
   grid-column: 2;
   grid-row: 1 / 4;
@@ -339,45 +348,57 @@ canvas { display: block; }
   flex-direction: column;
 }
 
-/* ---------- Inspector / EntryPanel (spec §5.2) ---------- */
-.entry-panel { display: flex; flex-direction: column; gap: 16px; }
+/*
+ * ---------- Inspector / EntryPanel (spec §5.2) ----------
+ * M9 任务 3：flex:1 + min-height:0 —— 让这块在 .workbench-inspector 的 flex
+ * 列里精确撑满剩余空间（而不是按内容自然高度生长），这样 .mark-list 的
+ * flex:1 才有一个真正有边界的容器可以收缩，内部滚动才会生效（否则
+ * flex:1 在一个无界高度的祖先里什么都不做，整块内容只会撑高
+ * .workbench-inspector 自己的滚动条，而不是列表自己滚）。take 行/打点入口
+ * 两块都是内容自适应高度，只有 .mark-list 是吸收剩余空间的那一个。
+ */
+.entry-panel { display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; }
 
-/* 轨道卡：三张横排 mini-card — 轨道色左边条 + accent 边框/底色（选中态） */
-.lane-cards { display: flex; gap: 8px; }
-.lane-card {
-  flex: 1;
-  min-width: 0;
-  position: relative;
+/* ---------- MarkList（M9 任务 3：取代原先与时间轴重复的泳道卡） ---------- */
+.mark-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.mark-row {
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  background: var(--bg-elevated);
+}
+.mark-row.is-selected { border-color: var(--accent); background: var(--accent-soft); }
+.mark-row-main {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px 8px 14px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-m);
-  color: var(--text-2);
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-1);
   text-align: left;
   cursor: pointer;
-  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
 }
-.lane-card::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 6px; bottom: 6px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--lane-color);
+.mark-row-main:hover { background: var(--bg-control-hover); }
+.mark-row.is-selected .mark-row-main:hover { background: transparent; }
+.mark-row-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mark-row-time { flex-shrink: 0; font-size: 12px; color: var(--text-2); }
+.mark-row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.mark-row-lock { flex-shrink: 0; color: var(--text-3); }
+
+/* 内联编辑器：选中行展开，标签/时刻/按住/删除各一行 */
+.mark-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 10px 10px;
+  border-top: 1px solid var(--border-subtle);
 }
-.lane-card:hover { background: var(--bg-control-hover); }
-.lane-card.is-selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--text-1);
-}
-.lane-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.lane-card-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
-.lane-card-name { font-size: 13px; font-weight: 600; color: inherit; }
-.lane-card-sub { font-size: 11px; color: var(--text-3); }
+.mark-editor-row { display: flex; align-items: center; gap: 8px; }
+.mark-editor-row input { flex: 1; min-width: 0; }
+.mark-editor-holding { justify-content: space-between; }
+.mark-editor-holding-text { font-size: 12px; color: var(--text-2); }
+.mark-editor-actions { display: flex; justify-content: flex-end; }
 
 /* Take 段：chip 行 + 新 Take ghost + 聚合 Switch */
 .take-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

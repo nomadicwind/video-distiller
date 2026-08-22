@@ -8,7 +8,9 @@ vi.mock('./api/client', () => ({
       Promise.resolve({
         id, take_id: 'tk_a', t_ms: (patch.t_ms as number) ?? 100,
         end_ms: patch.clear_end ? null : (patch.end_ms as number) ?? null,
-        kind: 'input', label: '2', provenance: 'human_edited', confidence: 1,
+        kind: 'input',
+        label: 'label' in patch ? (patch.label as string | null) : '2',
+        provenance: 'human_edited', confidence: 1,
       } satisfies Mark)),
     deleteMark: vi.fn(() => Promise.resolve({ ok: true })),
     newMark: vi.fn((takeId: string, m: Record<string, unknown>) =>
@@ -22,7 +24,9 @@ vi.mock('./api/client', () => ({
   },
 }))
 
-import { deleteSelected, insertAtPlayhead, moveMark, nudgeSelected, tallyAtPlayhead, toggleHolding } from './actions'
+import {
+  deleteSelected, insertAtPlayhead, moveMark, nudgeSelected, relabelMark, tallyAtPlayhead, toggleHolding,
+} from './actions'
 import { api } from './api/client'
 
 const tree: AnalysisTree = {
@@ -184,4 +188,28 @@ test('deleteSelected clears the holder mark end_ms before deleting the held endp
   const take = useSession.getState().analysis!.lanes[0].takes[0]
   expect(take.marks.map(m => m.id)).toEqual(['m1'])
   expect(take.marks[0].end_ms).toBeNull()
+})
+
+// M9 任务 3: MarkList 内联标签编辑器提交路径。
+test('relabelMark patches the label and updates the store', async () => {
+  await relabelMark('m1', 'W')
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { label: 'W' })
+  const take = useSession.getState().analysis!.lanes[0].takes[0]
+  expect(take.marks[0].label).toBe('W')
+})
+
+test('relabelMark trims surrounding whitespace before comparing/submitting', async () => {
+  await relabelMark('m1', '  W  ')
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { label: 'W' })
+})
+
+test('relabelMark no-ops on an empty (or whitespace-only) label: no PATCH, no store change', async () => {
+  await relabelMark('m1', '   ')
+  expect(api.patchMark).not.toHaveBeenCalled()
+  expect(useSession.getState().analysis!.lanes[0].takes[0].marks[0].label).toBe('2')
+})
+
+test('relabelMark no-ops when the trimmed label is unchanged from the current one', async () => {
+  await relabelMark('m1', '2')
+  expect(api.patchMark).not.toHaveBeenCalled()
 })

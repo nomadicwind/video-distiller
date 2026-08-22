@@ -36,7 +36,7 @@ export const api = {
   newTake: (laneId: string) => post(`/api/lanes/${laneId}/takes`).then(r => j<Take>(r)),
   newMark: (takeId: string, m: { t_ms: number; kind: 'input' | 'release'; label?: string | null; end_ms?: number | null }) =>
     post(`/api/takes/${takeId}/marks`, m).then(r => j<Mark>(r)),
-  patchMark: (id: string, patch: { t_ms?: number; end_ms?: number; label?: string; clear_end?: boolean }) =>
+  patchMark: (id: string, patch: { t_ms?: number; end_ms?: number; label?: string | null; clear_end?: boolean }) =>
     fetch(`/api/marks/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

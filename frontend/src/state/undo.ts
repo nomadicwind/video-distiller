@@ -29,6 +29,9 @@ export type UndoEntry =
     } // 逆 = 重插（+ 恢复 holder）
   | { kind: 'move'; markId: string; fromTMs: number; toTMs: number } // 逆 = patch 回 from
   | { kind: 'holding'; markId: string; patch: HoldPatch; inverse: HoldPatch }
+  // M9 任务 3：MarkList 内联编辑器的标签重命名。逆 = patch 回 fromLabel；
+  // redo 对称地把 patch/inverse 互换，与 'holding' 的结构完全对应。
+  | { kind: 'relabel'; markId: string; fromLabel: string | null; toLabel: string | null }
 
 const MAX_STACK = 100
 
@@ -163,6 +166,27 @@ async function applyInverse(entry: UndoEntry): Promise<UndoEntry> {
       const updated = await api.patchMark(entry.markId, entry.inverse)
       useSession.getState().updateMarkLocal(updated)
       return { kind: 'holding', markId: entry.markId, patch: entry.inverse, inverse: entry.patch }
+    }
+    case 'relabel': {
+      // Same no-op guard as 'insert'/'holding': the mark may no longer be in
+      // the currently-loaded analysis (stale entry from before a video switch
+      // — belt-and-braces alongside setAnalysis/clearAnalysis's own clear).
+      if (!findMarkAndTake(entry.markId)) return entry
+      // entry.fromLabel is null only if the original mark predates this
+      // relabel with no label at all — which in practice never happens: the
+      // only kind that ever carries a null label is 'release', and
+      // MarkList's editor (frontend/src/panel/MarkList.tsx) only renders the
+      // label field for 'input' marks (store._validate_mark forbids a
+      // 'release' mark from ever carrying a label, so relabeling one would
+      // 400 anyway). Worth flagging for whoever touches this next: the
+      // backend's PATCH /api/marks/{id} (api.py patch_mark) drops any field
+      // whose value is `None` from the update — sending `{label: null}`
+      // would silently no-op rather than clear it (unlike end_ms, which has
+      // the dedicated clear_end flag for exactly this reason) — so this
+      // branch is NOT a safe way to clear a label if it's ever reached.
+      const updated = await api.patchMark(entry.markId, { label: entry.fromLabel })
+      useSession.getState().updateMarkLocal(updated)
+      return { kind: 'relabel', markId: entry.markId, fromLabel: entry.toLabel, toLabel: entry.fromLabel }
     }
   }
 }
