@@ -3,8 +3,7 @@
   "configurations": [
     {
       "name": "backend",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "--project", "backend", "uvicorn", "vd.api:app", "--port", "8000"],
+      "url": "http://localhost:8000",
       "port": 8000
     },
     {
