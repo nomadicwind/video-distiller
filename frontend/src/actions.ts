@@ -99,11 +99,24 @@ export async function toggleHolding(
   pushUndo({ kind: 'holding', markId, patch, inverse })
 }
 
+/**
+ * Returns whether a mark was actually inserted — `false` covers both the
+ * precheck-hit case (below) and any POST failure (e.g. a race that slips
+ * past the precheck and gets the server's own 400; api.newMark's `j()`
+ * wrapper already surfaces that via ErrorBar, so this catch only stops the
+ * rejection from being mistaken for success by a caller gating on the
+ * return). Callers that don't care about the outcome (EntryPanel's keycap/
+ * 空标记/skill-insert buttons) can keep discarding it with `void`; hotkeys.ts's
+ * keyboard entry path uses it to avoid recording a "打点成功" bump
+ * (recordEntry -> StatusBar's 本 take 计数 + keycap flash) for a keystroke
+ * that was actually rejected — see handleEntryInsert below (round-1 review
+ * fix: it used to run recordEntry unconditionally in a bare `.then()`).
+ */
 export async function insertAtPlayhead(
   kind: 'input' | 'release', label: string | null,
-): Promise<void> {
+): Promise<boolean> {
   const s = useSession.getState()
-  if (!s.takeId) return
+  if (!s.takeId) return false
   const tMs = Math.round(s.playheadMs)
   // M9 task 2 precheck: mirrors the server's min-gap check (backend task 1)
   // against the current take's marks before POSTing, so the common case
@@ -113,11 +126,16 @@ export async function insertAtPlayhead(
   const take = currentTake(s)
   if (violatesMinGap(tMs, take?.marks ?? [], s.frameMs)) {
     s.setHintText('该位置与相邻标记过近（同一帧内），未打点')
-    return
+    return false
   }
-  const mark = await api.newMark(s.takeId, { t_ms: tMs, kind, label })
-  useSession.getState().insertMarkLocal(mark)
-  pushUndo({ kind: 'insert', markId: mark.id })
+  try {
+    const mark = await api.newMark(s.takeId, { t_ms: tMs, kind, label })
+    useSession.getState().insertMarkLocal(mark)
+    pushUndo({ kind: 'insert', markId: mark.id })
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function tallyAtPlayhead(): Promise<void> {

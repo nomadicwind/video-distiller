@@ -183,6 +183,20 @@ export function pushUndo(e: UndoEntry): void {
  * overlaps an undo()/redo() already in flight, so two near-simultaneous
  * triggers (e.g. a held-down key producing overlapping calls before either
  * awaits resolve) can't both pop and act on stack state at once.
+ *
+ * Round 1 review hardening: applyInverse can now throw mid-flight — e.g.
+ * restoring a mark to its `fromTMs` (an M9 task 2 'move' entry) can land it
+ * within one frame of another mark that has since moved into that gap, and
+ * the server's own min-gap check (backend task 1) 400s the PATCH. Before
+ * this fix, that throw propagated straight out of the already-popped entry:
+ * it was gone from undoStack and never made it onto redoStack either — a
+ * silent, permanent loss of that history entry. Now the pop is wrapped so a
+ * failure pushes the entry back onto the stack it came from (state
+ * unchanged from the caller's perspective — same entry, same position, just
+ * as if the pop never happened) and returns false, with a hint distinct
+ * from the generic error-store toast (api.ts's `j()` already pushed one)
+ * so the user specifically understands their undo/redo didn't take effect
+ * and can retry or give up.
  */
 export async function undo(): Promise<boolean> {
   if (busy) return false
@@ -190,24 +204,36 @@ export async function undo(): Promise<boolean> {
   try {
     const entry = undoStack.pop()
     if (!entry) return false
-    const opposite = await applyInverse(entry)
-    capPush(redoStack, opposite)
-    return true
+    try {
+      const opposite = await applyInverse(entry)
+      capPush(redoStack, opposite)
+      return true
+    } catch {
+      undoStack.push(entry)
+      useSession.getState().setHintText('撤销失败：目标位置已不合法')
+      return false
+    }
   } finally {
     busy = false
   }
 }
 
-/** Pops and inverts the most recent redo entry. Returns false on an empty stack, or while undo()/redo() is already in flight (see undo() above). */
+/** Pops and inverts the most recent redo entry. Returns false on an empty stack, or while undo()/redo() is already in flight (see undo() above). Mirrors undo()'s round-1 hardening: a mid-flight applyInverse failure restores the entry to redoStack instead of losing it, with its own hint text. */
 export async function redo(): Promise<boolean> {
   if (busy) return false
   busy = true
   try {
     const entry = redoStack.pop()
     if (!entry) return false
-    const opposite = await applyInverse(entry)
-    capPush(undoStack, opposite)
-    return true
+    try {
+      const opposite = await applyInverse(entry)
+      capPush(undoStack, opposite)
+      return true
+    } catch {
+      redoStack.push(entry)
+      useSession.getState().setHintText('重做失败：目标位置已不合法')
+      return false
+    }
   } finally {
     busy = false
   }
@@ -234,4 +260,14 @@ export function clearUndoHistory(): void {
 /** Test-only: clears both stacks so cases don't leak state into each other. */
 export function _resetForTest(): void {
   resetStacks()
+}
+
+/**
+ * Test-only: a shallow-copy snapshot of both stacks, so the round-1 undo/
+ * redo hardening (a failed applyInverse restores the popped entry to the
+ * stack it came from, rather than losing it) can be asserted directly
+ * instead of inferring it indirectly through a retried undo()/redo() call.
+ */
+export function _debugStacks(): { undo: UndoEntry[]; redo: UndoEntry[] } {
+  return { undo: [...undoStack], redo: [...redoStack] }
 }

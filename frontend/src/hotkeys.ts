@@ -24,6 +24,30 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
     && !['radio', 'checkbox', 'button', 'range', 'file'].includes(target.type)
 }
 
+/**
+ * Runs after a keyboard entry-mode keystroke's insertAtPlayhead settles:
+ * bumps lastEntry (StatusBar's 本 take 计数 + EntryPanel keycap flash) only
+ * when the mark was genuinely inserted. Extracted out of the onKey handler
+ * below — and exported — so hotkeys.test.ts can exercise the REAL gating
+ * logic directly (this project's vitest environment is 'node', no jsdom/
+ * testing-library, so dispatching a synthetic KeyboardEvent through a
+ * rendered component isn't cheaply available here; the same
+ * extract-a-pure/testable-function seam is how Player.tsx's
+ * decidePlayheadAction is unit-tested instead of driving the real player,
+ * see player/Player.test.ts).
+ *
+ * Round 1 review fix: this used to be a bare `.then(() => recordEntry(...))`
+ * chained directly onto insertAtPlayhead, which fired unconditionally —
+ * including when insertAtPlayhead's client-side min-gap precheck rejected
+ * the keystroke (resolves normally with no throw), so a REJECTED keystroke
+ * still incremented the StatusBar counter and flashed the keycap as if it
+ * had landed.
+ */
+export async function handleEntryInsert(label: string): Promise<void> {
+  const ok = await insertAtPlayhead('input', label)
+  if (ok) useSession.getState().recordEntry(label)
+}
+
 export function useHotkeys(video: Video): void {
   const fps = video.fps ?? 30
   const durationMs = video.duration_ms ?? 0
@@ -60,12 +84,11 @@ export function useHotkeys(video: Video): void {
         // including R — gets claimed here first, same as every other L0_KEYS
         // letter/digit.)
         e.preventDefault()
-        void insertAtPlayhead('input', entryLabel).then(() => {
-          // 打点成功后才记 —— 鼠标点击 EntryPanel 里的键帽走的是另一条路径
-          // （直接调用 insertAtPlayhead），不经过这里，所以不会驱动
-          // lastEntry；这是有意的，见 store.ts recordEntry 的注释。
-          useSession.getState().recordEntry(entryLabel)
-        })
+        // 打点成功后才记（见 handleEntryInsert 的 gating）—— 鼠标点击
+        // EntryPanel 里的键帽走的是另一条路径（直接调用 insertAtPlayhead），
+        // 不经过这里，所以不会驱动 lastEntry；这是有意的，见 store.ts
+        // recordEntry 的注释。
+        void handleEntryInsert(entryLabel)
         return
       }
       if (e.key === ' ') {

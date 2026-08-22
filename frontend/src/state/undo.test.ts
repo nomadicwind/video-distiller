@@ -22,7 +22,7 @@ vi.mock('../api/client', () => ({
 }))
 
 import { api } from '../api/client'
-import { _resetForTest, pushUndo, redo, undo } from './undo'
+import { _debugStacks, _resetForTest, pushUndo, redo, undo } from './undo'
 
 const tree: AnalysisTree = {
   id: 'an_1', video_id: 'v', name: 'n', tally: [],
@@ -234,6 +234,60 @@ test('clearing the analysis also clears both stacks', async () => {
   pushUndo({ kind: 'move', markId: 'm1', fromTMs: 100, toTMs: 110 })
   useSession.getState().clearAnalysis()
   expect(await undo()).toBe(false)
+})
+
+// Round 1 review hardening: a mid-flight applyInverse failure (e.g. the
+// server's own min-gap check 400ing a restore that's since become sub-frame-
+// adjacent to another mark) must not silently drop the popped entry from
+// both stacks. It should land back on the stack it was popped from, undo()/
+// redo() should report false, and a distinct hint (not just the generic
+// error-store toast api.ts's j() already pushed) should tell the user their
+// undo/redo didn't take effect.
+test('undo restores the popped entry to undoStack when applyInverse throws, and sets a distinct hint', async () => {
+  pushUndo({ kind: 'move', markId: 'm1', fromTMs: 50, toTMs: 100 })
+  vi.mocked(api.patchMark).mockRejectedValueOnce(new Error('API 400: 与相邻标记距离过近（同一帧内）'))
+
+  expect(await undo()).toBe(false)
+  expect(useSession.getState().hintText).toBe('撤销失败：目标位置已不合法')
+  expect(_debugStacks()).toEqual({
+    undo: [{ kind: 'move', markId: 'm1', fromTMs: 50, toTMs: 100 }],
+    redo: [],
+  })
+
+  // And it's genuinely retryable — a subsequent undo() (mock no longer
+  // rejecting) succeeds exactly as if the failed attempt never happened.
+  expect(await undo()).toBe(true)
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { t_ms: 50 })
+  expect(_debugStacks()).toEqual({
+    undo: [],
+    redo: [{ kind: 'move', markId: 'm1', fromTMs: 100, toTMs: 50 }],
+  })
+})
+
+test('redo restores the popped entry to redoStack when applyInverse throws, and sets a distinct hint', async () => {
+  pushUndo({ kind: 'move', markId: 'm1', fromTMs: 50, toTMs: 100 })
+  expect(await undo()).toBe(true) // redoStack now holds move(fromTMs:100, toTMs:50)
+  vi.clearAllMocks()
+
+  vi.mocked(api.patchMark).mockRejectedValueOnce(new Error('API 400: 与相邻标记距离过近（同一帧内）'))
+  expect(await redo()).toBe(false)
+  expect(useSession.getState().hintText).toBe('重做失败：目标位置已不合法')
+  expect(_debugStacks()).toEqual({
+    undo: [],
+    redo: [{ kind: 'move', markId: 'm1', fromTMs: 100, toTMs: 50 }],
+  })
+
+  expect(await redo()).toBe(true)
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { t_ms: 100 })
+})
+
+test('a failed undo() still releases the busy guard (finally runs) so a subsequent call is not spuriously blocked', async () => {
+  pushUndo({ kind: 'move', markId: 'm1', fromTMs: 50, toTMs: 100 })
+  vi.mocked(api.patchMark).mockRejectedValueOnce(new Error('API 400'))
+  expect(await undo()).toBe(false)
+  // If `busy` were left true, this would return false too even though the
+  // mock now resolves normally.
+  expect(await undo()).toBe(true)
 })
 
 test('concurrent undo() calls are serialized: the overlapping call no-ops while the first is in flight', async () => {
