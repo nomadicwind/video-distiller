@@ -2,7 +2,7 @@ export function Keycap({ label, onClick, wide, inert, pressed, armed, compact }:
   label: string
   onClick?: () => void
   wide?: boolean
-  /** Display-only keycap (e.g. ChordPreview/HotkeyOverlay): drops it from the tab order — it has no onClick, so a focusable, keyboard-activatable button there is a screen-reader/keyboard trap with no effect. */
+  /** Display-only keycap (e.g. ChordPreview/HotkeyOverlay): rendered as a <span> instead of a <button> — it has no onClick, so a focusable button would be a keyboard trap, and MarkList nests it inside its own row <button>, where a nested button is invalid HTML. */
   inert?: boolean
   /**
    * M7 任务 3：录入模式下物理键盘打点成功时，EntryStrip 给对应键帽临时
@@ -27,13 +27,12 @@ export function Keycap({ label, onClick, wide, inert, pressed, armed, compact }:
    */
   compact?: boolean
 }): JSX.Element {
+  const className = `keycap${wide ? ' keycap-wide' : ''}${inert ? ' keycap-inert' : ''}${pressed ? ' keycap-pressed' : ''}${armed ? ' keycap-armed' : ''}${compact ? ' keycap-compact' : ''}`
+  if (inert) {
+    return <span className={className}>{label}</span>
+  }
   return (
-    <button
-      type="button"
-      className={`keycap${wide ? ' keycap-wide' : ''}${inert ? ' keycap-inert' : ''}${pressed ? ' keycap-pressed' : ''}${armed ? ' keycap-armed' : ''}${compact ? ' keycap-compact' : ''}`}
-      tabIndex={inert ? -1 : undefined}
-      onClick={onClick}
-    >
+    <button type="button" className={className} onClick={onClick}>
       {label}
     </button>
   )
