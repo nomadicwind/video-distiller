@@ -361,14 +361,16 @@ test('setCompareConfig sets videoId/offset, forces compareOn=true, and mirrors i
   expect(after.analysis!.compare_offset_ms).toBe(-3000)
 })
 
-test('clearCompareConfig resets fields and clears analysis.compare_* back to null', () => {
+test('clearCompareConfig resets fields (including calibrating) and clears analysis.compare_* back to null', () => {
   const s = useSession.getState()
   s.setCompareConfig('vid_2', 500)
+  s.setCalibrating(true)
   s.clearCompareConfig()
   const after = useSession.getState()
   expect(after.compareVideoId).toBeNull()
   expect(after.compareOffsetMs).toBe(0)
   expect(after.compareOn).toBe(false)
+  expect(after.calibrating).toBe(false)
   expect(after.analysis!.compare_video_id).toBeNull()
   expect(after.analysis!.compare_offset_ms).toBeNull()
 })
@@ -383,6 +385,21 @@ test('toggleCompareOn refuses to turn on without a compareVideoId, but off alway
   expect(useSession.getState().compareOn).toBe(false) // off always allowed
   s.toggleCompareOn()
   expect(useSession.getState().compareOn).toBe(true) // config now exists, on is allowed again
+})
+
+test('toggleCompareOn off also resets calibrating (final review F1: off/on must not silently re-enter calibration)', () => {
+  const s = useSession.getState()
+  s.setCompareConfig('vid_2', 0)
+  s.setCalibrating(true)
+  expect(useSession.getState().calibrating).toBe(true)
+  s.toggleCompareOn()
+  const after = useSession.getState()
+  expect(after.compareOn).toBe(false)
+  expect(after.calibrating).toBe(false)
+  // Flipping back on must land in a clean, non-calibrating state.
+  s.toggleCompareOn()
+  expect(useSession.getState().compareOn).toBe(true)
+  expect(useSession.getState().calibrating).toBe(false)
 })
 
 test('setAnalysis with the SAME analysis id (a refetch) preserves a manually-toggled-off compareOn', () => {

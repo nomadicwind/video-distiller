@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { useSession } from '../state/store'
-import { clampMs, fmtTc } from '../time/frames'
+import { clampMs, fmtTc, stepFrame } from '../time/frames'
 import { Button } from '../ui/Button'
 import { decideResync, followTarget } from './compare'
 import { videoEl } from './Player'
@@ -79,8 +79,7 @@ function CalibrationBar({ durationMs, fps }: { durationMs: number; fps: number }
   const frameStepB = (dir: 1 | -1) => {
     const b = videoElB()
     if (!b) return
-    const stepMs = 1000 / fps
-    b.currentTime = clampMs(b.currentTime * 1000 + dir * stepMs, durationMs) / 1000
+    b.currentTime = stepFrame(b.currentTime, fps, dir, durationMs / 1000)
   }
 
   const progress = durationMs > 0 ? Math.min(100, Math.max(0, (bMs / durationMs) * 100)) : 0

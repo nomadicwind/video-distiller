@@ -281,13 +281,17 @@ export const useSession = create<Session>((set, get) => ({
     analysis: s.analysis && { ...s.analysis, compare_video_id: videoId, compare_offset_ms: offsetMs },
   })),
   clearCompareConfig: () => set(s => ({
-    compareVideoId: null, compareOffsetMs: 0, compareOn: false,
+    compareVideoId: null, compareOffsetMs: 0, compareOn: false, calibrating: false,
     analysis: s.analysis && { ...s.analysis, compare_video_id: null, compare_offset_ms: null },
   })),
   // Same guarded-toggle shape as toggleLoop: turning off always succeeds;
   // turning on requires a config to already exist (compareVideoId != null).
+  // Off also resets calibrating — otherwise switching off mid-calibration
+  // (B frozen, A unpaused, 「以当前两帧对齐」 armed) then back on would
+  // silently re-enter calibration with B remounted fresh at 0 (final review
+  // F1).
   toggleCompareOn: () => set(s => {
-    if (s.compareOn) return { compareOn: false }
+    if (s.compareOn) return { compareOn: false, calibrating: false }
     return s.compareVideoId != null ? { compareOn: true } : {}
   }),
   setCalibrating: on => set({ calibrating: on }),
