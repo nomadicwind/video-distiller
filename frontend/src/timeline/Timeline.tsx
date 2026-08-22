@@ -189,6 +189,40 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     return () => cancelAnimationFrame(raf)
   })
 
+  // 复查修复 #1：wheel 必须挂原生（非 passive）监听器，不能用 React 的
+  // onWheel prop——React≥17 把 wheel 监听器挂在 root 上且标记 passive，那
+  // 里调 preventDefault 是空操作，于是 T3 的 `.tl-canvas-wrap{overflow-y:
+  // auto}`（分割条把面板拖矮之后）会在同一次滚轮里和下面的 pan/zoom 同时
+  // 触发——两种运动叠在一起。直接给 canvas 挂 `{ passive:false }` 的原生
+  // 监听器，preventDefault 就能真正抑制 wrap 的原生滚动，同时保留这个手势
+  // 本身的 pan/zoom。viewport 一律通过 setViewport 的函数式更新读取（而不
+  // 是外层 `viewport` 变量），这样即便监听器只在 durationMs 变化时才重新
+  // 挂载（同一视频打开期间基本只挂一次），也不会闭包住过期的 viewport。
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = canvas.getBoundingClientRect()
+      const x = e.clientX - rect.left - GUTTER_W
+      const totalWidth = canvas.parentElement?.clientWidth ?? 800
+      const contentWidth = Math.max(0, totalWidth - GUTTER_W)
+      if (e.ctrlKey || e.metaKey) {
+        setViewport(cur => {
+          const v = { ...cur, widthPx: contentWidth }
+          return zoomed(v, e.deltaY > 0 ? 1.25 : 0.8, pxToMs(v, x), durationMs)
+        })
+      } else {
+        setViewport(cur => {
+          const v = { ...cur, widthPx: contentWidth }
+          return panned(v, Math.round((e.deltaY + e.deltaX) * (v.endMs - v.startMs) / 1000), durationMs)
+        })
+      }
+    }
+    canvas.addEventListener('wheel', handleWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', handleWheel)
+  }, [durationMs])
+
   // Viewport.widthPx is track CONTENT width — the gutter (GUTTER_W) is
   // rendered by draw.ts inside the same canvas but is not part of it.
   const vp = (): Viewport => {
@@ -219,6 +253,11 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
+    // 复查修复 #2：非左键（右键/中键）不得启动 scrub/拖动捕获——否则
+    // contextmenu 打断指针事件流后，浏览器对 pointerup/pointercancel 的派
+    // 发不一致，dragStateRef 可能滞留在 'ruler'，导致后续普通 hover 幽灵
+    // scrub 播放头（final-review #2）。
+    if (e.button !== 0) return
     const a = s.analysis
     const canvas = canvasRef.current
     if (!a || !canvas) return
@@ -419,17 +458,6 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     }
   }
 
-  const onWheel = (e: React.WheelEvent) => {
-    const v = vp()
-    const rect = canvasRef.current!.getBoundingClientRect()
-    const x = e.clientX - rect.left - GUTTER_W
-    if (e.ctrlKey || e.metaKey) {
-      setViewport(zoomed(v, e.deltaY > 0 ? 1.25 : 0.8, pxToMs(v, x), durationMs))
-    } else {
-      setViewport(panned(v, Math.round((e.deltaY + e.deltaX) * (v.endMs - v.startMs) / 1000), durationMs))
-    }
-  }
-
   if (!s.analysis) return null
   return (
     <>
@@ -454,7 +482,6 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
           onPointerLeave={onPointerLeave}
-          onWheel={onWheel}
         />
       </div>
     </>

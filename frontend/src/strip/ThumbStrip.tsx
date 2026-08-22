@@ -27,12 +27,20 @@ export function ThumbStrip({ video }: { video: Video }): JSX.Element {
   // 前 15%（controller 报告的 gap）。px 也不再叠加 scrollLeft（带内已无滚动）。
   const measure = (e: React.PointerEvent<HTMLDivElement>): { px: number; ms: number } => {
     const rect = e.currentTarget.getBoundingClientRect()
-    const px = e.clientX - rect.left
-    const ms = clampMs(frameRound(stripPxToMs(px, rect.width, durationMs), fps), durationMs)
+    const rawPx = e.clientX - rect.left
+    // 复查修复 #4：气泡定位用的 px clamp 到 [0, rect.width]——拖出带的左右
+    // 边界时（rawPx 本身不 clamp，供 ms 换算沿用原有的越界语义）气泡贴边显
+    // 示而不是跟着指针跑出 .strip 的 overflow:hidden 之外整体消失。ms 的
+    // clamp 已经由 stripPxToMs 内部的 ratio clamp + clampMs 兜底，用 rawPx
+    // 或者这里 clamp 后的 px 结果一致，这里就不重复计算。
+    const px = Math.max(0, Math.min(rawPx, rect.width))
+    const ms = clampMs(frameRound(stripPxToMs(rawPx, rect.width, durationMs), fps), durationMs)
     return { px, ms }
   }
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // 复查修复 #2：右键/中键不应启动 scrub（同 Timeline.tsx onPointerDown）。
+    if (e.button !== 0) return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragging.current = true
     const m = measure(e)

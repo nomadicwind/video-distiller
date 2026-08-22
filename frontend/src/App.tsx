@@ -185,6 +185,8 @@ function Workbench({ video }: { video: Video }) {
   // localStorage 只在 pointerup 写一次——dragHRef 记住这次拖动最后 clamp
   // 过的值，避免每次 move 都读写 storage。
   const onSplitterPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // 复查修复 #2：右键/中键不应启动分割条拖动（同 Timeline.tsx/ThumbStrip.tsx）。
+    if (e.button !== 0) return
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onSplitterPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -211,6 +213,10 @@ function Workbench({ video }: { video: Video }) {
   }
   const onSplitterPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    // 复查修复 #3：镜像 pointerup 分支的清空——否则被取消的这次拖动留在
+    // dragHRef 里的高度，会被下一次「无位移」的空点击（走 pointerup 分支）
+    // 当成「这次也拖动过」提交进 localStorage，违反 cancel 不落盘的约定。
+    dragHRef.current = null
   }
   const onSplitterDoubleClick = () => {
     dragHRef.current = null
