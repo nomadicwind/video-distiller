@@ -126,6 +126,55 @@ test('moveMark also patches the holder mark end_ms when it moves the held endpoi
   expect(take.marks.find(m => m.id === 'm2')!.t_ms).toBe(320)
 })
 
+// M9 任务 2: client-side min-gap precheck (entry/gap.ts) runs before the
+// insert/move API calls fire. On a hit, no network call is made and no undo
+// entry is pushed — the mark's local state (or lack thereof) is left exactly
+// as it was, matching the server's authoritative check (backend task 1) so
+// the common case never round-trips just to get rejected.
+test('insertAtPlayhead precheck: hint + no POST + no local insert when within frameMs of a neighbor', async () => {
+  useSession.getState().setFrameMs(34)
+  useSession.getState().setPlayhead(110) // |110-100| = 10 < 34
+  await insertAtPlayhead('input', 'W')
+  expect(api.newMark).not.toHaveBeenCalled()
+  expect(useSession.getState().hintText).toBe('该位置与相邻标记过近（同一帧内），未打点')
+  const marks = useSession.getState().analysis!.lanes[0].takes[0].marks
+  expect(marks.map(m => m.id)).toEqual(['m1'])
+})
+
+test('insertAtPlayhead precheck: a gap of exactly frameMs is legal and still posts', async () => {
+  useSession.getState().setFrameMs(34)
+  useSession.getState().setPlayhead(134) // |134-100| = 34, not < 34
+  await insertAtPlayhead('input', 'W')
+  expect(api.newMark).toHaveBeenCalledWith('tk_a', { t_ms: 134, kind: 'input', label: 'W' })
+})
+
+test('nudgeSelected precheck: hint + no PATCH + local state unchanged when the target is within frameMs of a neighbor', async () => {
+  useSession.getState().setFrameMs(34)
+  useSession.getState().setAnalysis(structuredClone(treeWithHold)) // m1@100, m2@300
+  useSession.getState().selectMark('m1')
+  await nudgeSelected(210) // 100+210=310, |310-300|=10 < 34 (m2 is the neighbor)
+  expect(api.patchMark).not.toHaveBeenCalled()
+  expect(useSession.getState().hintText).toBe('目标位置与相邻标记过近（同一帧内），未移动')
+  const take = useSession.getState().analysis!.lanes[0].takes[0]
+  expect(take.marks.find(m => m.id === 'm1')!.t_ms).toBe(100)
+})
+
+test('nudgeSelected precheck excludes the mark itself: nudging by 0 back onto its own t_ms is legal', async () => {
+  useSession.getState().setFrameMs(34)
+  await nudgeSelected(0)
+  expect(api.patchMark).toHaveBeenCalledWith('m1', { t_ms: 100 })
+})
+
+test('moveMark precheck: hint + no PATCH + local state unchanged on a same-frame collision', async () => {
+  useSession.getState().setFrameMs(34)
+  useSession.getState().setAnalysis(structuredClone(treeWithHold)) // m1@100, m2@300
+  await moveMark('m2', 110) // |110-100| = 10 < 34 (m1 is the neighbor)
+  expect(api.patchMark).not.toHaveBeenCalled()
+  expect(useSession.getState().hintText).toBe('目标位置与相邻标记过近（同一帧内），未移动')
+  const take = useSession.getState().analysis!.lanes[0].takes[0]
+  expect(take.marks.find(m => m.id === 'm2')!.t_ms).toBe(300)
+})
+
 test('deleteSelected clears the holder mark end_ms before deleting the held endpoint', async () => {
   useSession.getState().setAnalysis(structuredClone(treeWithHold))
   useSession.getState().selectMark('m2')

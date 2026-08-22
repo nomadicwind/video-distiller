@@ -33,6 +33,17 @@ export interface Session {
   flashMarks: Record<string, number>
   /** 录入模式下"最近一次打点"的标签与本 take 内的插入序号（M7 任务 3）：EntryPanel 据此给对应键帽加 120ms 按压态，StatusBar 据此显示"本 take 第 N 个"。切 take / 切视频都应清零 —— 见 selectTake/setAnalysis/clearAnalysis。 */
   lastEntry: { label: string; count: number } | null
+  /**
+   * 当前视频一帧的时长（ms），供 entry/gap.ts 的最小间距预检使用（M9 任务
+   * 2，语义与 backend/src/vd/store.py `_take_frame_ms` 一致：
+   * round(1000/fps)）。默认 34，直到 Workbench 挂载 effect 按
+   * `video.fps ?? 30` 算出真实值并调用 setFrameMs。
+   *
+   * 与 lastEntry 不同，这里刻意不在 setAnalysis/clearAnalysis 里重置——那两个
+   * 在每次切视频时触发，而 setFrameMs 由 Workbench 挂载 effect 独立调用；若
+   * 在这里重置就可能在 effect 跑之前把值抢回默认值，产生竞态。
+   */
+  frameMs: number
 
   setAnalysis: (a: AnalysisTree) => void
   clearAnalysis: () => void
@@ -64,6 +75,8 @@ export interface Session {
   toggleRefLines: () => void
   /** 录入模式打点成功后调用（仅 hotkeys.ts 的键盘打点路径，鼠标点击键帽已有原生 :active 反馈，不需要这个）：count 在 lastEntry 上自增，切 take/切视频时 lastEntry 被清空，故从 1 重新起数。 */
   recordEntry: (label: string) => void
+  /** Workbench 挂载 effect 按当前视频 fps 调用（见 App.tsx），供 entry/gap.ts 预检使用；不受 setAnalysis/clearAnalysis 影响，见 frameMs 字段注释。 */
+  setFrameMs: (ms: number) => void
 }
 
 const mapMarks = (a: AnalysisTree, takeId: string, f: (marks: Mark[]) => Mark[]): AnalysisTree => ({
@@ -85,7 +98,7 @@ export const useSession = create<Session>((set, get) => ({
   playheadMs: 0, entryMode: false, showAggregate: false,
   snapOn: true, showHotkeys: false,
   abLoop: emptyAbLoop(), hintText: null,
-  refLinesOn: false, flashMarks: {}, lastEntry: null,
+  refLinesOn: false, flashMarks: {}, lastEntry: null, frameMs: 34,
 
   setAnalysis: a => {
     const lane = a.lanes[0] ?? null
@@ -195,6 +208,7 @@ export const useSession = create<Session>((set, get) => ({
   // so reading its prior count here and falling back to 0 is all "简单自增，
   // 切 take 归零" needs — no separate module-level counter to keep in sync.
   recordEntry: label => set(s => ({ lastEntry: { label, count: (s.lastEntry?.count ?? 0) + 1 } })),
+  setFrameMs: ms => set({ frameMs: ms }),
   // Ordering guard lives HERE (not in hotkeys.ts) so both entry points —
   // the I/O hotkeys today, anything else calling these later — are safe by
   // construction: it's impossible to reach an inverted A>=B range through

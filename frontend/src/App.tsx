@@ -94,6 +94,7 @@ function Workbench({ video }: { video: Video }) {
   const analysis = useSession(s => s.analysis)
   const setAnalysis = useSession(s => s.setAnalysis)
   const clearAnalysis = useSession(s => s.clearAnalysis)
+  const setFrameMs = useSession(s => s.setFrameMs)
   const entryMode = useSession(s => s.entryMode)
   const [aggregate, setAggregate] = useState<Aggregate | null>(null)
   const showAggregate = useSession(st => st.showAggregate)
@@ -103,6 +104,13 @@ function Workbench({ video }: { video: Video }) {
   useHotkeys(video)
 
   useEffect(() => {
+    // M9 task 2: derive this video's frame length for the client-side
+    // min-gap precheck (entry/gap.ts via actions.ts), mirroring the
+    // server's round(1000/fps) (backend/src/vd/store.py `_take_frame_ms`).
+    // Set per mount rather than reset in setAnalysis/clearAnalysis (see
+    // store.ts's frameMs comment) so it doesn't race those video-switch
+    // resets.
+    setFrameMs(Math.round(1000 / (video.fps ?? 30)))
     api.listAnalyses(video.id)
       .then(list => (list.length ? api.getAnalysis(list[0].id) : api.createAnalysis(video.id)))
       .then(setAnalysis)
@@ -111,7 +119,7 @@ function Workbench({ video }: { video: Video }) {
     // fetch above resolves. Clear it on unmount/video change so a stale
     // window is never rendered or written into.
     return () => { clearAnalysis() }
-  }, [video.id, setAnalysis, clearAnalysis])
+  }, [video.id, video.fps, setAnalysis, clearAnalysis, setFrameMs])
 
   useEffect(() => {
     if (!showAggregate || !laneId) { setAggregate(null); return }

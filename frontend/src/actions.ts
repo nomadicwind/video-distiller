@@ -1,5 +1,6 @@
 import { api } from './api/client'
 import type { Mark, Take } from './api/types'
+import { violatesMinGap } from './entry/gap'
 import { currentTake, useSession } from './state/store'
 import { pushUndo } from './state/undo'
 import type { HoldPatch, HolderSnapshot } from './state/undo'
@@ -15,8 +16,23 @@ import type { HoldPatch, HolderSnapshot } from './state/undo'
  * holder's end_ms isn't tracked separately, since undo.ts's own move
  * executor recomputes the same holder relationship from live state when it
  * patches the mark back, carrying the holder along symmetrically.
+ *
+ * This is also the single choke point for the M9 task 2 client-side
+ * min-gap precheck: nudgeSelected (relative, hotkey-driven), moveMark
+ * (absolute, drag-driven), and any future list-editor move all funnel
+ * through here, so checking here — rather than duplicating the check in
+ * each caller — covers all of them by construction. `excludeId: mark.id`
+ * means landing back on the mark's own current t_ms (e.g. a nudge that
+ * nets to zero) is never mistaken for a collision with itself. The server
+ * (backend task 1) remains authoritative — a race that slips past this
+ * precheck still gets rejected there, surfacing as a 400 toast via j().
  */
 async function applyMarkMove(mark: Mark, newTMs: number, take: Take | null): Promise<void> {
+  const s = useSession.getState()
+  if (violatesMinGap(newTMs, take?.marks ?? [], s.frameMs, mark.id)) {
+    s.setHintText('目标位置与相邻标记过近（同一帧内），未移动')
+    return
+  }
   const fromTMs = mark.t_ms
   const holder = take?.marks.find(m => m.id !== mark.id && m.end_ms === mark.t_ms) ?? null
   const updated = await api.patchMark(mark.id, { t_ms: newTMs })
@@ -88,9 +104,18 @@ export async function insertAtPlayhead(
 ): Promise<void> {
   const s = useSession.getState()
   if (!s.takeId) return
-  const mark = await api.newMark(s.takeId, {
-    t_ms: Math.round(s.playheadMs), kind, label,
-  })
+  const tMs = Math.round(s.playheadMs)
+  // M9 task 2 precheck: mirrors the server's min-gap check (backend task 1)
+  // against the current take's marks before POSTing, so the common case
+  // never round-trips just to get rejected. On a hit: hint, no POST, no undo
+  // entry — local state is untouched. The server stays authoritative for
+  // the rare race that slips past this (400 toasts via j(), not suppressed).
+  const take = currentTake(s)
+  if (violatesMinGap(tMs, take?.marks ?? [], s.frameMs)) {
+    s.setHintText('该位置与相邻标记过近（同一帧内），未打点')
+    return
+  }
+  const mark = await api.newMark(s.takeId, { t_ms: tMs, kind, label })
   useSession.getState().insertMarkLocal(mark)
   pushUndo({ kind: 'insert', markId: mark.id })
 }

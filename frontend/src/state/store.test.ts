@@ -287,4 +287,26 @@ test('lastEntry resets to null on selectTake/selectLane/addTakeLocal/setAnalysis
   expect(useSession.getState().lastEntry).toBeNull()
 })
 
+// M9 任务 2: frameMs backs the client-side min-gap precheck (entry/gap.ts,
+// actions.ts). It defaults to 34 before Workbench has had a chance to derive
+// the real per-video value from fps (App.tsx's mount effect calls
+// setFrameMs(Math.round(1000/(video.fps??30)))), and — unlike lastEntry
+// above — must NOT be reset by setAnalysis/clearAnalysis: those fire on
+// every video switch, but Workbench's mount effect (which owns setFrameMs)
+// runs independently and would otherwise race a reset back to the stale
+// default.
+test('frameMs defaults to 34 and setFrameMs updates it', () => {
+  expect(useSession.getState().frameMs).toBe(34)
+  useSession.getState().setFrameMs(33)
+  expect(useSession.getState().frameMs).toBe(33)
+})
+
+test('frameMs survives setAnalysis and clearAnalysis (not video-scoped like lastEntry)', () => {
+  useSession.getState().setFrameMs(50)
+  useSession.getState().setAnalysis(structuredClone(tree))
+  expect(useSession.getState().frameMs).toBe(50)
+  useSession.getState().clearAnalysis()
+  expect(useSession.getState().frameMs).toBe(50)
+})
+
 afterEach(() => useSession.getState().setHintText(null))
