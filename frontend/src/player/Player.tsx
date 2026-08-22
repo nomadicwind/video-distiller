@@ -17,12 +17,15 @@ export function videoEl(): HTMLVideoElement | null {
  */
 export function toggleMonitorFullscreen(): void {
   if (document.fullscreenElement) {
-    void document.exitFullscreen()
+    // 复查修复：内嵌 WebView/沙箱预览等场景的 Permissions Policy 可能直接拒
+    // 绝该 Promise（TypeError: Permissions check failed）——静默吞掉即可，
+    // 不支持/被禁用的场景下本就该是 no-op，不需要向用户报错。
+    void document.exitFullscreen().catch(() => {})
     return
   }
   const v = videoEl()
   if (!v) return
-  void v.parentElement?.requestFullscreen()
+  void v.parentElement?.requestFullscreen().catch(() => {})
 }
 
 /** How far (ms) auditionMark seeks before/after its target, per the M7 T2 brief. */

@@ -125,6 +125,32 @@ function Workbench({ video }: { video: Video }) {
   const [tlH, setTlH] = useState<number | null>(() => readStoredTlH())
   const dragHRef = useRef<number | null>(null)
 
+  // 复查修复：clampTlHeight 的 max 依赖 window.innerHeight，只在渲染时求值
+  // ——单纯的窗口 resize 不会让 Workbench 重渲染，于是缩窗口后 tlH 存的旧
+  // px 高度不再重新收敛，时间轴面板不缩小、监视器反而被挤到几乎不可见（复
+  // 查复现：缩小视口 → .workbench-monitor 被压到约 20px，直到别的状态变化
+  // 顺带触发一次重渲染）。这里只订阅 resize 来"敲"一次重渲染（同 Timeline.tsx
+  // 的 ResizeObserver rAF 节流写法——一个从不被读取的计数器 tick，state 本
+  // 身不携带尺寸值），渲染时 gridTemplateRows 那行会用最新 window.innerHeight
+  // 重新 clamp；不直接改 tlH 本身，因为 tlH 是"用户拖到的高度"这份意图，
+  // resize 只改变它被 clamp 到多少，不改变意图本身。
+  const [, setResizeTick] = useState(0)
+  useEffect(() => {
+    let raf: number | null = null
+    const onResize = () => {
+      if (raf != null) return
+      raf = requestAnimationFrame(() => {
+        raf = null
+        setResizeTick(t => t + 1)
+      })
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      if (raf != null) cancelAnimationFrame(raf)
+    }
+  }, [])
+
   useEffect(() => {
     // M9 task 2: derive this video's frame length for the client-side
     // min-gap precheck (entry/gap.ts via actions.ts), mirroring the
@@ -175,7 +201,13 @@ function Workbench({ video }: { video: Video }) {
   // ——高度在 move 时已经是活的 state 变化，cancel 无需回滚，只是不落盘。
   const onSplitterPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
-    if (dragHRef.current != null) localStorage.setItem('vd.tl-h', String(dragHRef.current))
+    if (dragHRef.current != null) {
+      localStorage.setItem('vd.tl-h', String(dragHRef.current))
+      // 复查修复：写完立即清空，否则一次无位移的空点击（无 move，dragHRef
+      // 还留着上一次拖动的旧值）会在这里被当成"这次也拖动过"重复写入同一
+      // 个值——虽然值不变，但仍是一次多余的 localStorage 写。
+      dragHRef.current = null
+    }
   }
   const onSplitterPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
