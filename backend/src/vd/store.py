@@ -207,6 +207,28 @@ def clear_tally(conn, analysis_id):
     conn.commit()
 
 
+def set_compare(conn, analysis_id: str, video_id: str | None, offset_ms: int) -> None:
+    """设置/清除某 analysis 的对比视频与偏移。
+
+    video_id 为 None → 清除对比配置（两列写 NULL）；否则须为已存在且
+    status='ready' 的视频，不满足则 ValueError（M12 §Global Constraints）。
+    """
+    if video_id is not None:
+        video = get_video(conn, video_id)
+        if video is None or video["status"] != "ready":
+            raise ValueError("对比视频不存在或未就绪")
+        conn.execute(
+            "UPDATE analyses SET compare_video_id=?, compare_offset_ms=? WHERE id=?",
+            (video_id, offset_ms, analysis_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE analyses SET compare_video_id=NULL, compare_offset_ms=NULL WHERE id=?",
+            (analysis_id,),
+        )
+    conn.commit()
+
+
 # ---- Skill Catalog（spec §5.4/§5.5）----
 
 PATTERN_OPS = ("tap", "hold", "chord", "wheel", "gap", "skill")

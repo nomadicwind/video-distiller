@@ -166,6 +166,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.executescript(PROPOSALS_V3)
         conn.execute("PRAGMA user_version = 3")
         conn.commit()
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version < 4:
+        if not _column_exists(conn, "analyses", "compare_video_id"):
+            conn.execute("ALTER TABLE analyses ADD COLUMN compare_video_id TEXT")
+        if not _column_exists(conn, "analyses", "compare_offset_ms"):
+            conn.execute("ALTER TABLE analyses ADD COLUMN compare_offset_ms INTEGER")
+        conn.execute("PRAGMA user_version = 4")
+        conn.commit()
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:

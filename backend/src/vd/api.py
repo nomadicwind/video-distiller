@@ -171,6 +171,23 @@ def analysis(analysis_id: str, conn=Depends(get_conn)):
     return tree
 
 
+class ComparePatch(BaseModel):
+    video_id: str | None
+    offset_ms: int = 0
+
+
+@app.patch("/api/analyses/{analysis_id}/compare")
+def set_compare(analysis_id: str, req: ComparePatch, conn=Depends(get_conn)):
+    tree = store.get_analysis_tree(conn, analysis_id)
+    if tree is None:
+        raise HTTPException(404)
+    try:
+        store.set_compare(conn, analysis_id, req.video_id, req.offset_ms)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return store.get_analysis_tree(conn, analysis_id)
+
+
 @app.post("/api/lanes/{lane_id}/takes")
 def new_take(lane_id: str, conn=Depends(get_conn)):
     return store.create_take(conn, lane_id)

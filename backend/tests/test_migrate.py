@@ -10,12 +10,13 @@ def _cols(conn, table):
     return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
 
 
-def test_fresh_db_is_v3():
+def test_fresh_db_is_v4():
     conn = db.connect()
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
     assert {"skills", "keymaps", "rotations", "proposals"} <= _tables(conn)
     assert {"keymap_id", "keymap_version"} <= _cols(conn, "analyses")
     assert {"playbooks", "playbook_versions"} <= _tables(conn)
+    assert {"compare_video_id", "compare_offset_ms"} <= _cols(conn, "analyses")
 
 
 def test_migration_from_v1_is_idempotent(data_dir):
@@ -27,16 +28,17 @@ def test_migration_from_v1_is_idempotent(data_dir):
     raw.executescript(db.SCHEMA)          # v1 部分（IF NOT EXISTS）
     raw.close()
     conn = db.connect()
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
     conn.close()
     conn2 = db.connect()                  # 再连不报错（幂等）
     assert {"keymap_id", "keymap_version"} <= _cols(conn2, "analyses")
     assert {"playbooks", "playbook_versions"} <= _tables(conn2)
+    assert {"compare_video_id", "compare_offset_ms"} <= _cols(conn2, "analyses")
 
 
 def test_v3_adds_playbooks_and_extends_proposal_kind():
     conn = db.connect()
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
     assert {"playbooks", "playbook_versions"} <= _tables(conn)
     # kind 'playbook' 可插入（CHECK 已扩展）
     conn.execute("INSERT INTO videos(id,seq,name,source_kind,created_at)"
@@ -66,4 +68,4 @@ def test_v3_migration_preserves_existing_proposals(data_dir):
     conn = db.connect()
     row = conn.execute("SELECT * FROM proposals WHERE id='p0'").fetchone()
     assert row["status"] == "accepted" and row["kind"] == "rotation"
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
