@@ -8,6 +8,23 @@ export function videoEl(): HTMLVideoElement | null {
   return document.getElementById('vd-video') as HTMLVideoElement | null
 }
 
+/**
+ * 监视器全屏（M11 任务 3）：入口 = Transport 的 Maximize 按钮 + `.monitor`
+ * 双击，二者共用同一个函数。已处于全屏（`document.fullscreenElement` 有
+ * 值）时执行 exitFullscreen；否则对 videoEl() 的父容器（Player() 渲染的
+ * `.monitor` div）requestFullscreen——videoEl() 为 null（组件未挂载/video
+ * 元素尚未渲染）时整体 no-op。Esc 走浏览器原生退出，不在此处处理。
+ */
+export function toggleMonitorFullscreen(): void {
+  if (document.fullscreenElement) {
+    void document.exitFullscreen()
+    return
+  }
+  const v = videoEl()
+  if (!v) return
+  void v.parentElement?.requestFullscreen()
+}
+
 /** How far (ms) auditionMark seeks before/after its target, per the M7 T2 brief. */
 const AUDITION_PAD_MS = 400
 
@@ -157,7 +174,7 @@ export function Player({ video }: { video: Video }): JSX.Element {
   const ratio = video.width && video.height ? `${video.width} / ${video.height}` : '16 / 9'
 
   return (
-    <div className="monitor" style={{ aspectRatio: ratio }}>
+    <div className="monitor" style={{ aspectRatio: ratio }} onDoubleClick={toggleMonitorFullscreen}>
       <video ref={ref} id="vd-video" src={api.videoFileUrl(video.id)} />
     </div>
   )

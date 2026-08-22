@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ArrowLeft, Film, Link as LinkIcon, Upload } from 'lucide-react'
 import { api } from './api/client'
@@ -18,6 +18,7 @@ import { PlaybooksPage } from './pages/PlaybooksPage'
 import { PlaybookEditor } from './pages/PlaybookEditor'
 import { ExecPage } from './pages/ExecPage'
 import { HotkeyOverlay } from './shell/HotkeyOverlay'
+import { clampTlHeight } from './shell/splitMath'
 import { StatusBar } from './shell/StatusBar'
 import { TopBar } from './shell/TopBar'
 import type { NavPage } from './shell/TopBar'
@@ -90,6 +91,19 @@ function WorkbenchTopContext({ onBack }: { onBack: () => void }): JSX.Element | 
   )
 }
 
+/**
+ * localStorage 里存的时间轴面板高度（key `vd.tl-h`）。缺失/非数字一律读作
+ * null（回退到 auto 内容自适应高度），不在这里 clamp——clamp 发生在渲染时
+ * （见 Workbench 的 gridTemplateRows），这样 viewportH 变化后仍按当前视口
+ * 重新收敛，而不是把某次挂载时的 clamp 结果焊死存起来。
+ */
+function readStoredTlH(): number | null {
+  const raw = localStorage.getItem('vd.tl-h')
+  if (raw == null) return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
 function Workbench({ video }: { video: Video }) {
   const analysis = useSession(s => s.analysis)
   const setAnalysis = useSession(s => s.setAnalysis)
@@ -102,6 +116,14 @@ function Workbench({ video }: { video: Video }) {
   const hintText = useSession(st => st.hintText)
   const lastEntry = useSession(st => st.lastEntry)
   useHotkeys(video)
+
+  // M11 任务 3：分割条状态。gridRef 供拖动时读取容器 bottom；tlH 为 null
+  // 时行模板走 auto（内容自适应）；dragHRef 只在一次拖动手势内暂存最新
+  // clamp 后的高度，供 pointerup 时一次性写 localStorage（而不是每次
+  // pointermove 都写）。三者都是 hook，必须留在早退回之前。
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [tlH, setTlH] = useState<number | null>(() => readStoredTlH())
+  const dragHRef = useRef<number | null>(null)
 
   useEffect(() => {
     // M9 task 2: derive this video's frame length for the client-side
@@ -131,9 +153,44 @@ function Workbench({ video }: { video: Video }) {
   if (!analysis || analysis.video_id !== video.id) return <p>加载中…</p>
   const fps = video.fps ?? 30
   const durationMs = video.duration_ms ?? 0
+
+  // 分割条拖动：以 grid 容器的 bottom 与指针 clientY 之差算出新的时间轴面
+  // 板高度，clamp 后 setTlH（每次 move 都 set，直接驱动 gridTemplateRows）。
+  // localStorage 只在 pointerup 写一次——dragHRef 记住这次拖动最后 clamp
+  // 过的值，避免每次 move 都读写 storage。
+  const onSplitterPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onSplitterPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+    const grid = gridRef.current
+    if (!grid) return
+    const h = clampTlHeight(grid.getBoundingClientRect().bottom - e.clientY, window.innerHeight)
+    dragHRef.current = h
+    setTlH(h)
+  }
+  // 与本里程碑其它拖动手势（ThumbStrip.tsx endDrag、Timeline.tsx
+  // onPointerCancel）同一惯例：pointerup 与 pointercancel 都要释放捕获；
+  // pointerup 额外提交（写 localStorage），pointercancel 只清理、不提交
+  // ——高度在 move 时已经是活的 state 变化，cancel 无需回滚，只是不落盘。
+  const onSplitterPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    if (dragHRef.current != null) localStorage.setItem('vd.tl-h', String(dragHRef.current))
+  }
+  const onSplitterPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+  }
+  const onSplitterDoubleClick = () => {
+    dragHRef.current = null
+    setTlH(null)
+    localStorage.removeItem('vd.tl-h')
+  }
+
   return (
     <div className="workbench">
-      <div className="workbench-grid">
+      <div className="workbench-grid" ref={gridRef} style={{
+        gridTemplateRows: `minmax(0, 1fr) auto auto 6px ${tlH != null ? `${clampTlHeight(tlH, window.innerHeight)}px` : 'auto'}`,
+      }}>
         <div className="workbench-pane workbench-monitor">
           <Player video={video} />
         </div>
@@ -146,6 +203,12 @@ function Workbench({ video }: { video: Video }) {
         <div className="workbench-pane workbench-inspector">
           <Inspector />
         </div>
+        <div className="workbench-splitter"
+          onPointerDown={onSplitterPointerDown}
+          onPointerMove={onSplitterPointerMove}
+          onPointerUp={onSplitterPointerUp}
+          onPointerCancel={onSplitterPointerCancel}
+          onDoubleClick={onSplitterDoubleClick} />
         <div className="workbench-pane workbench-timeline">
           <Timeline video={video} aggregate={aggregate} />
         </div>
@@ -160,7 +223,7 @@ function Workbench({ video }: { video: Video }) {
           // 真的记上了"。lastEntry 在切 take/切视频时被 store 清空，所以
           // 回到常态文案是自动的，不需要在这里另外判断。
           ? (lastEntry ? `录入模式 · 最近 ${lastEntry.label} · 本 take 第 ${lastEntry.count} 个` : '录入模式 · 敲键即打点')
-          : '点击时间轴定位 · 键帽或录入模式打点')}
+          : '拖动时间轴或缩略图带定位 · 键帽或录入模式打点')}
         right={<span>{fps} fps · {fmtTc(durationMs)}</span>}
       />
     </div>

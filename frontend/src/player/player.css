@@ -26,6 +26,8 @@
   object-fit: contain;
   display: block;
 }
+/* 全屏时容器占满屏幕，圆角反而在四角露出黑边——去掉（M11 任务 3）。 */
+.monitor:fullscreen { border-radius: 0; }
 
 /* ---------- Transport bar ---------- */
 .transport {

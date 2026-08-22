@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Pause, Play, SkipBack, Timer } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Maximize, Pause, Play, SkipBack, Timer } from 'lucide-react'
 import { tallyAtPlayhead } from '../actions'
 import { api } from '../api/client'
 import type { Skill, Video } from '../api/types'
@@ -8,7 +8,7 @@ import { fmtTc } from '../time/frames'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Field } from '../ui/Field'
-import { frameStep, seekMs, togglePlay, videoEl } from './Player'
+import { frameStep, seekMs, toggleMonitorFullscreen, togglePlay, videoEl } from './Player'
 
 const RATES = [0.25, 0.5, 1, 2] as const
 type BackfillField = 'anim_ms' | 'cast_ms' | 'cd_ms'
@@ -181,6 +181,9 @@ export function Transport({ video }: { video: Video }): JSX.Element {
           </div>
         )}
       </div>
+
+      <Button variant="ghost" size="sm" icon={<Maximize />} tip="全屏 · 双击画面同效"
+        onClick={toggleMonitorFullscreen} />
     </div>
   )
 }

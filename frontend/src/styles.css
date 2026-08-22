@@ -275,10 +275,18 @@ canvas { display: block; }
   overflow: hidden;
 }
 
+/*
+ * grid-template-rows here is the static fallback for the 5-row frame (M11
+ * 分割条 adds row 4, a 6px splitter, pushing the timeline to row 5) — the
+ * real, resizable row template is set inline on this div from Workbench
+ * state (App.tsx: `tlH`), which overrides this rule whenever it applies.
+ * This declaration only matters before that state settles or if JS fails,
+ * so it mirrors the inline default (`auto` for the timeline row).
+ */
 .workbench-grid {
   display: grid;
   grid-template-columns: 1fr 320px;
-  grid-template-rows: minmax(0, 1fr) auto auto auto;
+  grid-template-rows: minmax(0, 1fr) auto auto 6px auto;
   gap: 1px;
   background: var(--bg-app);
   flex: 1;
@@ -339,9 +347,39 @@ canvas { display: block; }
   flex-direction: column;
   gap: 12px;
 }
-.workbench-timeline {
+/*
+ * .workbench-splitter (M11 分割条): sits between the strip row and the
+ * timeline row, spans both columns. Transparent by default; a 1px center
+ * line lights up on hover as the drag affordance (same 140ms-ease timing as
+ * the rest of the app's hover transitions, e.g. .transport-tally-count
+ * above). Dragging it sets Workbench's `tlH` state (see App.tsx), which
+ * drives .workbench-grid's inline gridTemplateRows.
+ */
+.workbench-splitter {
   grid-column: 1 / -1;
   grid-row: 4;
+  position: relative;
+  cursor: row-resize;
+  background: transparent;
+}
+.workbench-splitter::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  background: transparent;
+  transition: background-color 140ms ease;
+}
+.workbench-splitter:hover::before {
+  background: var(--accent);
+}
+
+.workbench-timeline {
+  grid-column: 1 / -1;
+  grid-row: 5;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -558,8 +596,12 @@ canvas { display: block; }
   border-bottom: 1px solid var(--border-subtle);
 }
 
-/* canvas 自身横向可滚动（工具栏保持固定，不随之滚动）。 */
-.tl-canvas-wrap { min-width: 0; min-height: 0; overflow-x: auto; touch-action: none; }
+/*
+ * canvas 自身横向可滚动（工具栏保持固定，不随之滚动）。overflow-y: auto
+ * 是 M11 分割条加的——面板被拖矮到小于内容自然高度时纵向内部滚动，而不是
+ * 挤压/裁切画布；100vh 无页面滚动的整体框架（.workbench 见上）不受影响。
+ */
+.tl-canvas-wrap { min-width: 0; min-height: 0; overflow-x: auto; overflow-y: auto; touch-action: none; }
 
 /* ---------- Inspector / InferPanel (spec §5.2/§7/§8-8) ---------- */
 .infer-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
