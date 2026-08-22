@@ -206,6 +206,17 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     seekMs(clampMs(frameRound(raw, fps), durationMs))
   }
 
+  // scrub 四件套（标尺分支的原行为，抽出来给内容区空白/未选中泳道复用）：
+  // setPointerCapture + {kind:'ruler'} + setScrubbing(true) + 立即 seek。
+  // 沿用 'ruler' 这个 kind——onPointerMove/onPointerUp 只按 kind 分支，不关心
+  // 这次按下具体落在标尺还是泳道内容区，行为需要完全一致。
+  const startScrub = (e: React.PointerEvent, x: number, v: Viewport) => {
+    canvasRef.current!.setPointerCapture(e.pointerId)
+    dragStateRef.current = { kind: 'ruler' }
+    setScrubbing(true)
+    seekToX(x, v)
+  }
+
   const onPointerDown = (e: React.PointerEvent) => {
     const a = s.analysis
     const canvas = canvasRef.current
@@ -215,10 +226,7 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
 
     // 标尺区 / 播放头手柄（手柄全然落在标尺高度内）：立即 seek + 进入连续 scrub。
     if (y < RULER_H && x >= 0) {
-      canvas.setPointerCapture(e.pointerId)
-      dragStateRef.current = { kind: 'ruler' }
-      setScrubbing(true)
-      seekToX(x, v)
+      startScrub(e, x, v)
       return
     }
 
@@ -227,13 +235,28 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     const laneIdx = Math.floor((y - RULER_H) / LANE_H)
     const lane = a.lanes[laneIdx]
     if (!lane) { dragStateRef.current = null; return }
-    if (lane.id !== s.laneId) {
-      s.selectLane(lane.id)
+
+    // 沟槽列（x<0，泳道头）：纯选择，不触发 scrub。
+    if (x < 0) {
+      if (lane.id !== s.laneId) s.selectLane(lane.id)
       dragStateRef.current = null
       return
     }
+
+    // 内容区、未选中泳道：选中 + 定位一步完成，不提前 return 进入 scrub——
+    // 此按下不做药丸/标记命中测试，它们本就只在选中泳道的当前 take 上命中。
+    if (lane.id !== s.laneId) {
+      s.selectLane(lane.id)
+      startScrub(e, x, v)
+      return
+    }
+
     const take = lane.takes.find(t => t.id === s.takeId)
-    if (!take) { dragStateRef.current = null; return }
+    if (!take) {
+      // 定位不依赖 take：当前泳道没有可用 take 时，空白同样进入 scrub。
+      startScrub(e, x, v)
+      return
+    }
 
     // Δ 药丸优先于标记命中测试：hitTestMark 只按 x 距离判断（±6px），完全不看
     // y，所以像 0ms-delta 相邻标记对这种 pill 与标记共享同一 x 的情形，会被
@@ -256,8 +279,8 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
       return
     }
 
-    // 空白 / Δ 药丸：既非标尺也非可拖动标记，语义留到 pointerup（原点击行为）。
-    dragStateRef.current = { kind: 'click' }
+    // 空白：与标尺同语义，直接 scrub（不再走 pointerup 的原点击 seek 分支）。
+    startScrub(e, x, v)
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -309,7 +332,9 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     const lane = a.lanes[laneIdx]
     const take = lane?.id === s.laneId ? lane.takes.find(t => t.id === s.takeId) : undefined
     const overMark = take ? hitTestMark(take.marks, v, x) : null
-    canvas.style.cursor = overMark ? 'grab' : ''
+    // 泳道内容区空白（含未选中泳道）与可 scrub 语义一致，光标改 col-resize；
+    // 标记悬停仍 grab（原样不动）。
+    canvas.style.cursor = overMark ? 'grab' : 'col-resize'
     scheduleHover(pxToMs(v, x))
   }
 
@@ -349,7 +374,8 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     if (canvasRef.current) canvasRef.current.style.cursor = ''
   }
 
-  /** 空白处 seek（按帧取整）/ Δ 药丸 holding 切换 — 未拖动的原点击语义。 */
+  /** Δ 药丸 holding 切换 — 未拖动的原点击语义（空白处已在按下时完成 scrub 定位，
+   *  不再需要 pointerup 兜底 seek）。 */
   const handleClick = (e: React.PointerEvent) => {
     const a = s.analysis
     if (!a) return
@@ -366,12 +392,7 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     if (hitIv) {
       const { markId, patch } = holdingPatch(hitIv, !hitIv.holding)
       void toggleHolding(markId, patch)
-      return
     }
-
-    // 已选中轨的空白处：播放头 seek 到点击处（按帧取整）— 不改变当前选中标记。
-    const raw = pxToMs(v, x)
-    seekMs(clampMs(frameRound(raw, fps), durationMs))
   }
 
   const onWheel = (e: React.WheelEvent) => {
