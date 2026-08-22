@@ -209,9 +209,10 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
   // scrub 四件套（标尺分支的原行为，抽出来给内容区空白/未选中泳道复用）：
   // setPointerCapture + {kind:'ruler'} + setScrubbing(true) + 立即 seek。
   // 沿用 'ruler' 这个 kind——onPointerMove/onPointerUp 只按 kind 分支，不关心
-  // 这次按下具体落在标尺还是泳道内容区，行为需要完全一致。
-  const startScrub = (e: React.PointerEvent, x: number, v: Viewport) => {
-    canvasRef.current!.setPointerCapture(e.pointerId)
+  // 这次按下具体落在标尺还是泳道内容区，行为需要完全一致。canvas 由调用方
+  // 传入（已在 onPointerDown 顶部判空过），避免重复用 canvasRef.current! 断言。
+  const startScrub = (e: React.PointerEvent, canvas: HTMLCanvasElement, x: number, v: Viewport) => {
+    canvas.setPointerCapture(e.pointerId)
     dragStateRef.current = { kind: 'ruler' }
     setScrubbing(true)
     seekToX(x, v)
@@ -226,7 +227,7 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
 
     // 标尺区 / 播放头手柄（手柄全然落在标尺高度内）：立即 seek + 进入连续 scrub。
     if (y < RULER_H && x >= 0) {
-      startScrub(e, x, v)
+      startScrub(e, canvas, x, v)
       return
     }
 
@@ -247,14 +248,14 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     // 此按下不做药丸/标记命中测试，它们本就只在选中泳道的当前 take 上命中。
     if (lane.id !== s.laneId) {
       s.selectLane(lane.id)
-      startScrub(e, x, v)
+      startScrub(e, canvas, x, v)
       return
     }
 
     const take = lane.takes.find(t => t.id === s.takeId)
     if (!take) {
       // 定位不依赖 take：当前泳道没有可用 take 时，空白同样进入 scrub。
-      startScrub(e, x, v)
+      startScrub(e, canvas, x, v)
       return
     }
 
@@ -280,7 +281,7 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     }
 
     // 空白：与标尺同语义，直接 scrub（不再走 pointerup 的原点击 seek 分支）。
-    startScrub(e, x, v)
+    startScrub(e, canvas, x, v)
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -369,6 +370,29 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
     dragStateRef.current = null
   }
 
+  // pointercancel（触控/触控板手势被系统接管、边缘滑动等——ThumbStrip.tsx
+  // 的 endDrag 是同一场景）：必须做与 onPointerUp 相同的收尾清理（否则
+  // scrubbing=true / dragStateRef 残留在 'ruler'，下一次普通 hover-move 会
+  // 命中 onPointerMove 的 ruler 分支反复调用 seekToX，造成幽灵 scrub），但
+  // 绝不能执行任何点击/提交语义：ruler 只退出 scrubbing 状态本身（seek 已
+  // 实时发生，无需再提交一次）；mark 只清预览——moveMark 本就从未提交到服务
+  // 端，丢弃预览等价于回滚到拖动前的位置，不调用 moveMark；'click'（Δ药丸）
+  // 不触发 handleClick。
+  const onPointerCancel = (e: React.PointerEvent) => {
+    const canvas = canvasRef.current
+    const drag = dragStateRef.current
+    if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
+
+    if (drag?.kind === 'ruler') {
+      setScrubbing(false)
+      if (canvas) canvas.style.cursor = ''
+    } else if (drag?.kind === 'mark') {
+      scheduleDragPreview(null)
+      if (canvas) canvas.style.cursor = ''
+    }
+    dragStateRef.current = null
+  }
+
   const onPointerLeave = () => {
     scheduleHover(null)
     if (canvasRef.current) canvasRef.current.style.cursor = ''
@@ -428,6 +452,7 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
           onPointerLeave={onPointerLeave}
           onWheel={onWheel}
         />
