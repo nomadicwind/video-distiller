@@ -1,17 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
-import { ListChecks, Lock, Trash2 } from 'lucide-react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { ListChecks, Trash2 } from 'lucide-react'
 import { deleteSelected, moveMark, relabelMark, toggleHolding } from '../actions'
 import type { Lane, Mark, Take } from '../api/types'
 import { seekMs } from '../player/Player'
 import { useSession } from '../state/store'
 import { fmtTc } from '../time/frames'
-import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import { Field } from '../ui/Field'
+import { Keycap } from '../ui/Keycap'
 
-const KIND_LABEL: Record<Mark['kind'], string> = { input: '打点', release: '空标记' }
-const KIND_BADGE: Record<Mark['kind'], 'accent' | 'neutral'> = { input: 'accent', release: 'neutral' }
+/** M10 任务 2：泳道色源——沿用 timeline/theme.ts 读取同一批 --lane-l0/l1/l2
+ * token 的思路，只是这里落在 DOM 侧：直接引用 CSS 变量名（而非读计算值），
+ * 通过 --rail-color 自定义属性挂到 .mark-sequence 容器上，一次映射，竖轨/
+ * 节点/按住条三处样式全部消费同一个变量，泳道切换不需要额外 JS 逻辑。 */
+const LANE_VAR: Record<Lane['layer'], string> = {
+  L0: 'var(--lane-l0)', L1: 'var(--lane-l1)', L2: 'var(--lane-l2)',
+}
 
 /**
  * M9 任务 3：面板重构的主体——取代原先与时间轴重复的泳道卡，改为当前泳道
@@ -19,6 +24,23 @@ const KIND_BADGE: Record<Mark['kind'], 'accent' | 'neutral'> = { input: 'accent'
  * 见 state/store.ts 的 byT）。点击行 = selectMark + seekMs，与时间轴选中态
  * 共享同一个 selectedMarkId，双向同步天然免费；选中行额外展开内联编辑器
  * （见下方 MarkEditor）。
+ *
+ * M10 任务 2：渲染层重做成"序列视图"——只改这个函数的 JSX/CSS，选择/seek/
+ * scrollIntoView/撤销管线（selectMark、seekMs、rowRefs、useEffect）与
+ * MarkEditor 本体一律不动。视觉表达：
+ *   - 竖轨：每行左侧 .mark-rail 列画一条泳道色 30% 的竖线（节点/按住条也在
+ *     这一列），相邻行的线段首尾相接，读出来是一条贯穿列表的轨道。
+ *   - 节点：8px 实心圆 = input；release 换成同尺寸空心圆环——这就是这一行
+ *     kind 的唯一视觉来源，不再叠加单独的 kind 徽章（见下面"设计取舍"）。
+ *   - 行间 Δ：相邻两条标记的 t_ms 差值，作为轨道上的一条独立"连接行"
+ *     （.mark-delta）显示在两条标记行之间，而非贴在某一行内部——这样它读作
+ *     "行与行之间的间隔"而不是"属于某一行的属性"，跟序列视图的表达一致。
+ *   - 标签：有 label 时渲染成 inert compact Keycap（整个 chord/技能名字符
+ *     串塞进一枚键帽，不拆分）；release 恒定 label=null（见后端
+ *     store._validate_mark），这时直接显示"空标记"纯文本——这行文字同时
+ *     补上了原来 kind 徽章承担的"这是一条空标记"语义，不需要再画一枚徽章。
+ *   - holding：节点下方追加一条固定 24px 高的短竖条（泳道色 32%），行内文本
+ *     从原来的 Lock 图标换成 `按住 {end_ms-t_ms}ms` 小字，信息量不降反升。
  */
 export function MarkList({ lane, take }: { lane: Lane; take: Take | null }): JSX.Element {
   const s = useSession()
@@ -37,31 +59,49 @@ export function MarkList({ lane, take }: { lane: Lane; take: Take | null }): JSX
 
   return (
     <div className="mark-list">
+      <p className="mark-list-header">操作序列 · {marks.length} 条</p>
       {marks.length === 0 ? (
         <EmptyState icon={<ListChecks />} text="该 take 还没有标记" />
       ) : (
-        marks.map(m => {
-          const selected = m.id === s.selectedMarkId
-          return (
-            <div
-              key={m.id}
-              className={`mark-row${selected ? ' is-selected' : ''}`}
-              ref={el => { rowRefs.current[m.id] = el }}
-            >
-              <button
-                type="button"
-                className="mark-row-main"
-                onClick={() => { s.selectMark(m.id); seekMs(m.t_ms) }}
-              >
-                <span className="mono mark-row-time">{fmtTc(m.t_ms)}</span>
-                <Badge kind={KIND_BADGE[m.kind]}>{KIND_LABEL[m.kind]}</Badge>
-                <span className="mark-row-label">{m.label ?? '—'}</span>
-                {m.end_ms != null && <Lock className="mark-row-lock" size={12} />}
-              </button>
-              {selected && <MarkEditor mark={m} lane={lane} />}
-            </div>
-          )
-        })
+        <div className="mark-sequence" style={{ '--rail-color': LANE_VAR[lane.layer] } as React.CSSProperties}>
+          {marks.map((m, i) => {
+            const selected = m.id === s.selectedMarkId
+            const holding = m.end_ms != null
+            const next = marks[i + 1]
+            return (
+              <Fragment key={m.id}>
+                <div className="mark-row-wrap" ref={el => { rowRefs.current[m.id] = el }}>
+                  <div className="mark-rail">
+                    <span className={`mark-node${m.kind === 'release' ? ' mark-node-hollow' : ''}`} />
+                    {holding && <span className="mark-hold-bar" />}
+                  </div>
+                  <div className={`mark-row${selected ? ' is-selected' : ''}`}>
+                    <button
+                      type="button"
+                      className="mark-row-main"
+                      onClick={() => { s.selectMark(m.id); seekMs(m.t_ms) }}
+                    >
+                      <span className="mono mark-row-time">{fmtTc(m.t_ms)}</span>
+                      {m.label != null
+                        ? <Keycap label={m.label} inert compact />
+                        : <span className="mark-row-label-text">空标记</span>}
+                      {m.end_ms != null && (
+                        <span className="mono mark-row-hold-text">按住 {m.end_ms - m.t_ms}ms</span>
+                      )}
+                    </button>
+                    {selected && <MarkEditor mark={m} lane={lane} />}
+                  </div>
+                </div>
+                {next && (
+                  <div className="mark-delta">
+                    <div className="mark-rail" aria-hidden="true" />
+                    <span className="mono mark-delta-text">+{next.t_ms - m.t_ms}ms</span>
+                  </div>
+                )}
+              </Fragment>
+            )
+          })}
+        </div>
       )}
     </div>
   )

@@ -359,13 +359,62 @@ canvas { display: block; }
  */
 .entry-panel { display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; }
 
-/* ---------- MarkList（M9 任务 3：取代原先与时间轴重复的泳道卡） ---------- */
+/* ---------- MarkList（M9 任务 3：取代原先与时间轴重复的泳道卡；
+   M10 任务 2：渲染层改成"序列视图"——竖轨 + 节点 + 行间 Δ，见下方） ---------- */
 .mark-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-.mark-row {
-  border: 1px solid transparent;
-  border-radius: var(--radius-m);
-  background: var(--bg-elevated);
+.mark-list-header { margin: 0; font-size: 12px; color: var(--text-2); }
+
+/* .mark-sequence 承载 --rail-color（由 MarkList.tsx 按 lane.layer 映射到
+   --lane-l0/l1/l2 写进行内样式），下面竖轨/节点/按住条三处样式统一消费同一
+   个变量，泳道切换时只需换这一个值。 */
+.mark-sequence { display: flex; flex-direction: column; }
+
+/* 竖轨：每行左侧一列固定宽度，line 用 ::before 居中放置，相邻行首尾相接
+   读出一条贯穿列表的轨道；节点/按住条是这一列的实际子节点，line 在它们
+   下面（DOM 序在前），不会盖住节点。 */
+.mark-rail {
+  position: relative;
+  flex-shrink: 0;
+  width: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 11px;
 }
+.mark-rail::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--rail-color) 30%, transparent);
+}
+.mark-node {
+  position: relative;
+  z-index: 1;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rail-color);
+  flex-shrink: 0;
+}
+/* release：空心圆环——这就是这一行 kind 的唯一视觉来源，不再叠加单独的
+   kind 徽章（M10 任务 2 设计取舍，见 MarkList.tsx 顶部注释/任务报告）。 */
+.mark-node-hollow { background: transparent; border: 2px solid var(--rail-color); box-sizing: border-box; }
+.mark-hold-bar {
+  position: relative;
+  z-index: 1;
+  margin-top: 4px;
+  width: 6px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rail-color) 32%, transparent);
+}
+
+.mark-row-wrap { display: flex; gap: 8px; }
+.mark-row { flex: 1; min-width: 0; border: 1px solid transparent; border-radius: var(--radius-m); background: var(--bg-elevated); }
 .mark-row.is-selected { border-color: var(--accent); background: var(--accent-soft); }
 .mark-row-main {
   width: 100%;
@@ -383,8 +432,14 @@ canvas { display: block; }
 .mark-row.is-selected .mark-row-main:hover { background: transparent; }
 .mark-row-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .mark-row-time { flex-shrink: 0; font-size: 12px; color: var(--text-2); }
-.mark-row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.mark-row-lock { flex-shrink: 0; color: var(--text-3); }
+.mark-row-label-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-2); }
+.mark-row-hold-text { flex-shrink: 0; font-size: 11px; color: var(--text-3); }
+
+/* 行间 Δ：相邻两条标记的 t_ms 差值，独立于任何一行——轨道继续贯穿
+   （.mark-rail 复用，无节点/按住条子节点也照样画线），文字贴轨道右侧。 */
+.mark-delta { display: flex; align-items: center; gap: 8px; min-height: 16px; }
+.mark-delta .mark-rail { align-self: stretch; padding-top: 0; }
+.mark-delta-text { color: var(--text-3); font-size: 10px; }
 
 /* 内联编辑器：选中行展开，标签/时刻/按住/删除各一行 */
 .mark-editor {
