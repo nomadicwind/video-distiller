@@ -8,7 +8,8 @@
   align-items: center;
   border-radius: var(--radius-m);
   background: var(--bg-inset);
-  cursor: pointer;
+  cursor: col-resize;
+  touch-action: none; /* 指针捕获期间禁用浏览器手势接管（如触屏滚动/缩放） */
 }
 .strip img { display: block; }
 
@@ -19,4 +20,43 @@
   height: 2px;
   background: var(--accent);
   pointer-events: none;
+}
+
+/* 播放头针线（M11 任务 1）：全高 2px 竖线 + 顶部小握把圆点，随 progress*w 移动。 */
+.strip-needle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+.strip-needle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, 0);
+}
+
+/* 悬停/拖动时码气泡：跟随光标 x，贴在带内顶部（overflow-y: hidden 之内，避免被裁）。 */
+.strip-hover-tc {
+  position: absolute;
+  top: 4px;
+  transform: translateX(6px);
+  padding: 2px 6px;
+  border-radius: var(--radius-s);
+  background: var(--bg-app);
+  color: var(--text-1);
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-1);
+  z-index: 2;
 }

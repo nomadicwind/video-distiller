@@ -55,7 +55,7 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
   const fps = video.fps ?? 30
   const durationMs = video.duration_ms ?? 10_000
   const [viewport, setViewport] = useState<Viewport>({
-    startMs: 0, endMs: Math.min(10_000, durationMs), widthPx: 800,
+    startMs: 0, endMs: durationMs, widthPx: 800,
   })
 
   // 悬停幽灵线（ghost line）/ 标尺气泡时码 — pointermove 期间 rAF 节流更新
