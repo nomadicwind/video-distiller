@@ -54,7 +54,7 @@ export function timelineHeight(laneCount: number): number {
   return RULER_H + laneCount * LANE_H
 }
 
-/** Shared with EntryPanel's lane cards (spec §5.2) so the gutter and Inspector never drift apart. */
+/** Also consumed by EntryStrip/MarkList (lane cards removed in M9) so gutter and panel stay consistent. */
 export const LANE_SUBTITLE: Record<Lane['layer'], string> = { L0: '操作', L1: '技能', L2: '连招' }
 
 /** Half-pixel snap so a 1px stroke lands on a physical pixel, not a blurred straddle. */
