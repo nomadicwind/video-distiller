@@ -4,6 +4,7 @@ import { moveMark, toggleHolding } from '../actions'
 import { seekMs } from '../player/Player'
 import { useSession } from '../state/store'
 import { clampMs, frameRound } from '../time/frames'
+import { EntryStrip } from './EntryStrip'
 import { Toolbar } from './Toolbar'
 import { draw, timelineHeight, type DragPreview } from './draw'
 import {
@@ -396,6 +397,10 @@ export function Timeline({ video, aggregate }: { video: Video; aggregate: Aggreg
         durationMs={durationMs}
         onViewport={setViewport}
       />
+      {/* M10 任务 1：打点条（EntryStrip）下沉——原 Inspector/EntryPanel 的
+          打点区块搬到这里，紧贴 Toolbar 之下、画布之上，DOM 流式自然占位
+          （.entry-strip 固定 34px，不计入画布高度计算）。 */}
+      <EntryStrip />
       <div className="tl-canvas-wrap">
         <canvas
           ref={canvasRef}

@@ -127,6 +127,10 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+/* M10 任务 1：紧凑变体（见 Keycap.tsx 的 `compact` prop）——EntryStrip 的
+   34px 打点条容不下标准 28px 键帽，这里只收紧高度与左右内边距，其余视觉
+   （pressed/armed/hover/active）与标准键帽完全一致，靠层叠顺序自然覆盖。 */
+.keycap-compact { height: 24px; padding: 0 6px; }
 
 /* ---------- Tabs ---------- */
 .tabs {

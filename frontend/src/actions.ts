@@ -105,7 +105,7 @@ export async function toggleHolding(
  * past the precheck and gets the server's own 400; api.newMark's `j()`
  * wrapper already surfaces that via ErrorBar, so this catch only stops the
  * rejection from being mistaken for success by a caller gating on the
- * return). Callers that don't care about the outcome (EntryPanel's keycap/
+ * return). Callers that don't care about the outcome (EntryStrip's keycap/
  * 空标记/skill-insert buttons) can keep discarding it with `void`; hotkeys.ts's
  * keyboard entry path uses it to avoid recording a "打点成功" bump
  * (recordEntry -> StatusBar's 本 take 计数 + keycap flash) for a keystroke

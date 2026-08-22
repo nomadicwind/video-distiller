@@ -423,19 +423,10 @@ canvas { display: block; }
 .take-chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--text-1); }
 .take-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* L0：标题行 + Keycap 网格（4 列）+ 空标记宽键帽 + 录入模式 Switch */
-.entry-l0 { display: flex; flex-direction: column; gap: 10px; }
-.entry-section-title { font-size: 12px; color: var(--text-2); }
-/* M8 任务 2：标题后缀提示——点亮修饰键可组合出 'Ctrl+Alt+A' 这样的 label，
-   比正文更弱化，呼应 .switch-hint 的 11px/text-3 分级。 */
-.entry-section-hint { margin-left: 4px; font-size: 11px; color: var(--text-3); }
-/* M8 任务 2：Ctrl/Alt/Shift 粘滞修饰键 chip 行，位于键帽网格上方，独立一行
-   横排（不是网格的一部分，宽度按内容自适应，故不复用 .keycap-grid）。 */
-.keycap-modifier-row { display: flex; gap: 6px; }
-.keycap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.keycap-grid .keycap { width: 100%; }
-
-/* L1/L2：技能名 Field + datalist + 插入 */
+/* L1/L2：技能名输入 + datalist + 插入（M10 任务 1：随打点条一起迁移到
+   .entry-strip 内，见 EntryStrip.tsx；L0 的键帽网格/空标记/录入 Switch
+   不再需要独立的 .entry-l0/.keycap-modifier-row/.keycap-grid 容器——
+   EntryStrip 是单行 flex，键帽直接铺开即可，见 .entry-strip 规则）。 */
 .skill-input-row { display: flex; gap: 8px; }
 .skill-input-row input { flex: 1; }
 
@@ -491,6 +482,26 @@ canvas { display: block; }
   cursor: pointer;
 }
 .tl-zoom-slider::-moz-range-track { background: var(--bg-control); border-radius: 999px; }
+
+/*
+ * ---------- EntryStrip (M10 任务 1：打点条下沉，spec §5.2/§6.1) ----------
+ * 原 Inspector/EntryPanel 打点区块下沉到时间轴顶部，紧贴 Toolbar 之下、
+ * 画布之上：固定 34px 单行，横向排布键帽/Switch/技能输入，超出可横向
+ * 滚动而不占用垂直空间（.workbench-timeline 是 flex column，这一行按
+ * DOM 流式自然占位，画布高度计算不需要感知它）。flex:0 0 auto 防止被
+ * canvas-wrap 的 min-height:0 挤压变形。
+ */
+.entry-strip {
+  height: 34px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 8px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+}
 
 /* canvas 自身横向可滚动（工具栏保持固定，不随之滚动）。 */
 .tl-canvas-wrap { min-width: 0; min-height: 0; overflow-x: auto; touch-action: none; }

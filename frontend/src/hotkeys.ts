@@ -11,7 +11,7 @@ import { clampMs, frameRound } from './time/frames'
  * Only genuine text-entry targets swallow single-key hotkeys entirely
  * (typing '?' in the B站 URL box, digits in a "keymap id" field, etc. must
  * reach the field, not fire a shortcut). Radio/checkbox/button/range/file
- * inputs (e.g. the lane radios and the entry-mode checkbox in EntryPanel)
+ * inputs (e.g. the lane radios and the entry-mode checkbox in EntryStrip)
  * are NOT text entry — focusing one must not kill every hotkey until the
  * user clicks elsewhere. Shared by useHotkeys and HotkeyOverlay's global
  * '?' listener (code review: HotkeyOverlay had no guard, so '?' typed into
@@ -26,7 +26,7 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
 
 /**
  * Runs after a keyboard entry-mode keystroke's insertAtPlayhead settles:
- * bumps lastEntry (StatusBar's 本 take 计数 + EntryPanel keycap flash) only
+ * bumps lastEntry (StatusBar's 本 take 计数 + EntryStrip keycap flash) only
  * when the mark was genuinely inserted. Extracted out of the onKey handler
  * below — and exported — so hotkeys.test.ts can exercise the REAL gating
  * logic directly (this project's vitest environment is 'node', no jsdom/
@@ -85,7 +85,7 @@ export function useHotkeys(video: Video): void {
         // letter/digit.)
         e.preventDefault()
         // 打点成功后才记（见 handleEntryInsert 的 gating）—— 鼠标点击
-        // EntryPanel 里的键帽走的是另一条路径（直接调用 insertAtPlayhead），
+        // EntryStrip 里的键帽走的是另一条路径（直接调用 insertAtPlayhead），
         // 不经过这里，所以不会驱动 lastEntry；这是有意的，见 store.ts
         // recordEntry 的注释。
         void handleEntryInsert(entryLabel)

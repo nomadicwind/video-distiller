@@ -31,7 +31,7 @@ export interface Session {
   refLinesOn: boolean
   /** 刚打点标记的"出生"时刻（M7 任务 3）：markId → bornAt(ms epoch)，驱动 draw.ts 里 300ms 的插入闪烁反馈；insertMarkLocal 写入，超过 1s 的旧条目惰性清理（下次 insertMarkLocal 时顺手过滤，不用定时器）。 */
   flashMarks: Record<string, number>
-  /** 录入模式下"最近一次打点"的标签与本 take 内的插入序号（M7 任务 3）：EntryPanel 据此给对应键帽加 120ms 按压态，StatusBar 据此显示"本 take 第 N 个"。切 take / 切视频都应清零 —— 见 selectTake/setAnalysis/clearAnalysis。 */
+  /** 录入模式下"最近一次打点"的标签与本 take 内的插入序号（M7 任务 3）：EntryStrip 据此给对应键帽加 120ms 按压态，StatusBar 据此显示"本 take 第 N 个"。切 take / 切视频都应清零 —— 见 selectTake/setAnalysis/clearAnalysis。 */
   lastEntry: { label: string; count: number } | null
   /**
    * 当前视频一帧的时长（ms），供 entry/gap.ts 的最小间距预检使用（M9 任务

@@ -97,7 +97,7 @@ function MarkEditor({ mark, lane }: { mark: Mark; lane: Lane }): JSX.Element {
     if (rounded !== mark.t_ms) void moveMark(mark.id, rounded)
   }
 
-  // L1/L2 复用 EntryPanel 技能名输入同一套"本泳道已用过的标签"集合，给
+  // L1/L2 复用 EntryStrip 技能名输入同一套"本泳道已用过的标签"集合，给
   // 重命名一个候选列表；L0 的 label 是键位/修饰键组合出的 chord 字符串，
   // 没有对应的固定候选集，不挂 datalist。
   const usedLabels = lane.layer !== 'L0'
