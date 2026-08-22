@@ -39,6 +39,7 @@ const tree: AnalysisTree = {
     }],
   }],
   keymap_id: null, keymap_version: null,
+  compare_video_id: null, compare_offset_ms: null,
 }
 
 beforeEach(() => {

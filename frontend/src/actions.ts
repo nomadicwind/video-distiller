@@ -170,3 +170,33 @@ export async function tallyAtPlayhead(): Promise<void> {
   const t = await api.addTally(s.analysis.id, Math.round(s.playheadMs))
   useSession.getState().addTallyLocal(t)
 }
+
+/**
+ * Persists a compare-video + offset configuration (M12 任务 2): PATCHes
+ * `/api/analyses/{id}/compare`, then syncs the store from the *response* —
+ * not the raw params — matching this file's usual success-then-side-effect
+ * ordering (relabelMark et al.), so a server-side normalization would still
+ * be reflected locally. Also exits calibration: the calibration flow's only
+ * exit is "以当前两帧对齐 → 保存并退出校准" (global-constraints §校准流), and
+ * a direct (non-calibration) offset edit exiting a calibration that was
+ * never entered is simply a no-op.
+ */
+export async function saveCompare(videoId: string, offsetMs: number): Promise<void> {
+  const s = useSession.getState()
+  if (!s.analysis) return
+  const updated = await api.patchCompare(s.analysis.id, videoId, offsetMs)
+  useSession.getState().setCompareConfig(updated.compare_video_id ?? videoId, updated.compare_offset_ms ?? offsetMs)
+  useSession.getState().setCalibrating(false)
+}
+
+/** Clears the compare configuration: PATCHes `video_id: null` (offset is
+ * cleared server-side alongside it — see global-constraints §持久化) and
+ * resets the local mirror. Also exits calibration, same reasoning as
+ * saveCompare. */
+export async function clearCompare(): Promise<void> {
+  const s = useSession.getState()
+  if (!s.analysis) return
+  await api.patchCompare(s.analysis.id, null, 0)
+  useSession.getState().clearCompareConfig()
+  useSession.getState().setCalibrating(false)
+}

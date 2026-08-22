@@ -23,6 +23,8 @@ export interface AnalysisTree {
   id: string; video_id: string; name: string
   lanes: Lane[]; tally: Tally[]
   keymap_id: string | null; keymap_version: number | null
+  /** M12 对比模式配置：`compare_video_id` 为 null 时对比未配置（compare_offset_ms 一并为 null）。 */
+  compare_video_id: string | null; compare_offset_ms: number | null
 }
 
 export interface AggMark {

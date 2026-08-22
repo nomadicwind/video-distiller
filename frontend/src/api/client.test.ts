@@ -109,6 +109,27 @@ test('backfeedExec posts to exec backfeed endpoint', async () => {
   expect(JSON.parse(init.body)).toEqual({ analysis_id: 'an_1' })
 })
 
+test('patchCompare sends PATCH with video_id/offset_ms to the compare endpoint', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ id: 'an_1', compare_video_id: 'vid_2', compare_offset_ms: 1500 }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  const tree = await api.patchCompare('an_1', 'vid_2', 1500)
+  expect(tree.compare_video_id).toBe('vid_2')
+  const [url, init] = fetchMock.mock.calls[0]
+  expect(url).toBe('/api/analyses/an_1/compare')
+  expect(init.method).toBe('PATCH')
+  expect(JSON.parse(init.body)).toEqual({ video_id: 'vid_2', offset_ms: 1500 })
+})
+
+test('patchCompare clears with a null video_id', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ id: 'an_1', compare_video_id: null, compare_offset_ms: null }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await api.patchCompare('an_1', null, 0)
+  const [, init] = fetchMock.mock.calls[0]
+  expect(JSON.parse(init.body)).toEqual({ video_id: null, offset_ms: 0 })
+})
+
 test('patchRotation sends PATCH with name to rotation endpoint', async () => {
   const fetchMock = vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ id: 'rot_1', name: '新名字', note: null }), { status: 200 }))

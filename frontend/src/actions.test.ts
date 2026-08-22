@@ -21,11 +21,18 @@ vi.mock('./api/client', () => ({
       } satisfies Mark)),
     addTally: vi.fn((analysisId: string, t_ms: number) =>
       Promise.resolve({ id: 'tm_new', analysis_id: analysisId, t_ms })),
+    patchCompare: vi.fn((_analysisId: string, videoId: string | null, offsetMs: number) =>
+      Promise.resolve({
+        id: 'an_1', video_id: 'v', name: 'n', tally: [],
+        lanes: [], keymap_id: null, keymap_version: null,
+        compare_video_id: videoId, compare_offset_ms: videoId === null ? null : offsetMs,
+      } satisfies AnalysisTree)),
   },
 }))
 
 import {
-  deleteSelected, insertAtPlayhead, moveMark, nudgeSelected, relabelMark, tallyAtPlayhead, toggleHolding,
+  clearCompare, deleteSelected, insertAtPlayhead, moveMark, nudgeSelected, relabelMark, saveCompare,
+  tallyAtPlayhead, toggleHolding,
 } from './actions'
 import { api } from './api/client'
 
@@ -39,6 +46,7 @@ const tree: AnalysisTree = {
     }],
   }],
   keymap_id: null, keymap_version: null,
+  compare_video_id: null, compare_offset_ms: null,
 }
 
 // m1 holds until m2 (m1.end_ms === m2.t_ms) — used to test that the holder
@@ -56,6 +64,7 @@ const treeWithHold: AnalysisTree = {
     }],
   }],
   keymap_id: null, keymap_version: null,
+  compare_video_id: null, compare_offset_ms: null,
 }
 
 beforeEach(() => {
@@ -212,4 +221,38 @@ test('relabelMark no-ops on an empty (or whitespace-only) label: no PATCH, no st
 test('relabelMark no-ops when the trimmed label is unchanged from the current one', async () => {
   await relabelMark('m1', '2')
   expect(api.patchMark).not.toHaveBeenCalled()
+})
+
+// M12 任务 2: saveCompare/clearCompare.
+
+test('saveCompare PATCHes the compare config and syncs the store from the response', async () => {
+  useSession.getState().setCalibrating(true)
+  await saveCompare('vid_2', 1500)
+  expect(api.patchCompare).toHaveBeenCalledWith('an_1', 'vid_2', 1500)
+  const s = useSession.getState()
+  expect(s.compareVideoId).toBe('vid_2')
+  expect(s.compareOffsetMs).toBe(1500)
+  expect(s.compareOn).toBe(true)
+  expect(s.calibrating).toBe(false) // saving exits calibration
+  expect(s.analysis!.compare_video_id).toBe('vid_2')
+})
+
+test('clearCompare PATCHes video_id: null and resets the store', async () => {
+  await saveCompare('vid_2', 1500)
+  useSession.getState().setCalibrating(true)
+  await clearCompare()
+  expect(api.patchCompare).toHaveBeenLastCalledWith('an_1', null, 0)
+  const s = useSession.getState()
+  expect(s.compareVideoId).toBeNull()
+  expect(s.compareOffsetMs).toBe(0)
+  expect(s.compareOn).toBe(false)
+  expect(s.calibrating).toBe(false)
+  expect(s.analysis!.compare_video_id).toBeNull()
+})
+
+test('saveCompare/clearCompare are no-ops without a current analysis', async () => {
+  useSession.getState().clearAnalysis()
+  await saveCompare('vid_2', 1500)
+  await clearCompare()
+  expect(api.patchCompare).not.toHaveBeenCalled()
 })

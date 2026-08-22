@@ -10,6 +10,7 @@ const tree: AnalysisTree = {
   ],
   tally: [],
   keymap_id: null, keymap_version: null,
+  compare_video_id: null, compare_offset_ms: null,
 }
 const mark = (id: string, t: number): Mark =>
   ({ id, take_id: 'tk_a', t_ms: t, end_ms: null, kind: 'input', label: '2', provenance: 'human_manual', confidence: 1 })
@@ -307,6 +308,88 @@ test('frameMs survives setAnalysis and clearAnalysis (not video-scoped like last
   expect(useSession.getState().frameMs).toBe(50)
   useSession.getState().clearAnalysis()
   expect(useSession.getState().frameMs).toBe(50)
+})
+
+// M12 任务 2: 对比模式字段初始化/复位路径。
+
+test('setAnalysis with no compare config leaves compare state at its empty defaults', () => {
+  const s = useSession.getState()
+  expect(s.compareVideoId).toBeNull()
+  expect(s.compareOffsetMs).toBe(0)
+  expect(s.compareOn).toBe(false)
+  expect(s.calibrating).toBe(false)
+})
+
+test('setAnalysis with a compare config present initializes compareOn=true from analysis.compare_*', () => {
+  const s = useSession.getState()
+  s.setAnalysis(structuredClone({ ...tree, compare_video_id: 'vid_2', compare_offset_ms: 1500 }))
+  const after = useSession.getState()
+  expect(after.compareVideoId).toBe('vid_2')
+  expect(after.compareOffsetMs).toBe(1500)
+  expect(after.compareOn).toBe(true)
+})
+
+test('setAnalysis resets calibrating to false even mid-calibration on the previous video', () => {
+  const s = useSession.getState()
+  s.setCalibrating(true)
+  s.setAnalysis(structuredClone(tree))
+  expect(useSession.getState().calibrating).toBe(false)
+})
+
+test('clearAnalysis resets all four compare fields regardless of prior state', () => {
+  const s = useSession.getState()
+  s.setCompareConfig('vid_2', 2000)
+  s.setCalibrating(true)
+  s.clearAnalysis()
+  const after = useSession.getState()
+  expect(after.compareVideoId).toBeNull()
+  expect(after.compareOffsetMs).toBe(0)
+  expect(after.compareOn).toBe(false)
+  expect(after.calibrating).toBe(false)
+})
+
+test('setCompareConfig sets videoId/offset, forces compareOn=true, and mirrors into analysis.compare_*', () => {
+  const s = useSession.getState()
+  s.setCompareConfig('vid_2', -3000)
+  const after = useSession.getState()
+  expect(after.compareVideoId).toBe('vid_2')
+  expect(after.compareOffsetMs).toBe(-3000)
+  expect(after.compareOn).toBe(true)
+  expect(after.analysis!.compare_video_id).toBe('vid_2')
+  expect(after.analysis!.compare_offset_ms).toBe(-3000)
+})
+
+test('clearCompareConfig resets fields and clears analysis.compare_* back to null', () => {
+  const s = useSession.getState()
+  s.setCompareConfig('vid_2', 500)
+  s.clearCompareConfig()
+  const after = useSession.getState()
+  expect(after.compareVideoId).toBeNull()
+  expect(after.compareOffsetMs).toBe(0)
+  expect(after.compareOn).toBe(false)
+  expect(after.analysis!.compare_video_id).toBeNull()
+  expect(after.analysis!.compare_offset_ms).toBeNull()
+})
+
+test('toggleCompareOn refuses to turn on without a compareVideoId, but off always succeeds', () => {
+  const s = useSession.getState()
+  s.toggleCompareOn()
+  expect(useSession.getState().compareOn).toBe(false) // guarded: no config yet
+  s.setCompareConfig('vid_2', 0)
+  expect(useSession.getState().compareOn).toBe(true) // setCompareConfig already turned it on
+  s.toggleCompareOn()
+  expect(useSession.getState().compareOn).toBe(false) // off always allowed
+  s.toggleCompareOn()
+  expect(useSession.getState().compareOn).toBe(true) // config now exists, on is allowed again
+})
+
+test('setCalibrating flips the flag independently of compare config', () => {
+  const s = useSession.getState()
+  expect(s.calibrating).toBe(false)
+  s.setCalibrating(true)
+  expect(useSession.getState().calibrating).toBe(true)
+  s.setCalibrating(false)
+  expect(useSession.getState().calibrating).toBe(false)
 })
 
 afterEach(() => useSession.getState().setHintText(null))

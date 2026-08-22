@@ -60,6 +60,13 @@ export const api = {
     fetch(`/api/skills/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }).then(r => j<Skill>(r)),
   deleteSkill: (id: string) => fetch(`/api/skills/${id}`, { method: 'DELETE' }).then(r => j<{ ok: boolean }>(r)),
 
+  patchCompare: (analysisId: string, videoId: string | null, offsetMs: number) =>
+    fetch(`/api/analyses/${analysisId}/compare`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_id: videoId, offset_ms: offsetMs }),
+    }).then(r => j<AnalysisTree>(r)),
+
   listKeymaps: () => fetch('/api/keymaps').then(r => j<Keymap[]>(r)),
   saveKeymap: (k: { keymap_id: string; class_?: string; binds: Record<string, string[]> }) =>
     post('/api/keymaps', k).then(r => j<Keymap>(r)),

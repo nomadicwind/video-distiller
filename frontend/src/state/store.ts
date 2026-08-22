@@ -45,6 +45,24 @@ export interface Session {
    */
   frameMs: number
 
+  /**
+   * 对比模式（M12 任务 2）。`compareVideoId`/`compareOffsetMs` 是会话级镜像
+   * ——独立于 `analysis.compare_video_id`/`compare_offset_ms`（同样在
+   * setCompareConfig/clearCompareConfig 里保持同步），这样 Task 3 的 UI 可以
+   * 直接订阅这两个顶层字段，不必每次都下钻 analysis。
+   *
+   * `compareOn` 是会话内开关（离开页面/切视频不持久化到后端）：配置存在
+   * （compareVideoId != null）才可能为 true —— toggleCompareOn 据此拒绝在
+   * 无配置时开启（见下方守卫，同 setLoopA/setLoopB 的既有惯例）。
+   *
+   * `calibrating` 是校准态标志：真值时 B 暂时脱离跟随、可独立定位
+   * （global-constraints §校准流），且主播放头据此暂停（Task 3 消费）。
+   */
+  compareVideoId: string | null
+  compareOffsetMs: number
+  compareOn: boolean
+  calibrating: boolean
+
   setAnalysis: (a: AnalysisTree) => void
   clearAnalysis: () => void
   selectLane: (laneId: string) => void
@@ -77,6 +95,21 @@ export interface Session {
   recordEntry: (label: string) => void
   /** Workbench 挂载 effect 按当前视频 fps 调用（见 App.tsx），供 entry/gap.ts 预检使用；不受 setAnalysis/clearAnalysis 影响，见 frameMs 字段注释。 */
   setFrameMs: (ms: number) => void
+  /**
+   * 保存/更新一份对比配置（saveCompare 在 PATCH 成功后调用，见
+   * actions.ts）。与 setAnalysis 不同，这里只动对比相关字段，不触碰
+   * laneId/takeId/selectedMarkId 等标注位置状态——切换/校准对比视频不应该
+   * 把用户从当前泳道/take 甩回去。同步写回 analysis.compare_* 字段，保持
+   * 与顶层镜像一致。设置一份新配置隐含"现在应该开着"，故 compareOn 一并
+   * 置 true（与 setAnalysis 的初始化规则一致）。
+   */
+  setCompareConfig: (videoId: string, offsetMs: number) => void
+  /** clearCompare（actions.ts）在 PATCH 清除成功后调用；同样只复位对比字段。 */
+  clearCompareConfig: () => void
+  /** 会话内开关；无配置（compareVideoId 为 null）时拒绝开启，关闭则始终允许——与 toggleLoop 的守卫惯例一致。 */
+  toggleCompareOn: () => void
+  /** 进入/退出校准态；退出即恢复跟随（global-constraints §B 永远从动）。 */
+  setCalibrating: (on: boolean) => void
 }
 
 const mapMarks = (a: AnalysisTree, takeId: string, f: (marks: Mark[]) => Mark[]): AnalysisTree => ({
@@ -99,6 +132,7 @@ export const useSession = create<Session>((set, get) => ({
   snapOn: true, showHotkeys: false,
   abLoop: emptyAbLoop(), hintText: null,
   refLinesOn: false, flashMarks: {}, lastEntry: null, frameMs: 34,
+  compareVideoId: null, compareOffsetMs: 0, compareOn: false, calibrating: false,
 
   setAnalysis: a => {
     const lane = a.lanes[0] ?? null
@@ -123,6 +157,15 @@ export const useSession = create<Session>((set, get) => ({
       // entry pointing at an id that no longer exists is harmless (draw.ts's
       // findMark just skips it) but pointless to carry across a video switch.
       lastEntry: null, flashMarks: {}, hintText: null,
+      // M12: a new analysis carries its own compare config (or none) — a
+      // stale compareVideoId/compareOffsetMs from the previous video would
+      // otherwise point B at a video/offset that means nothing here. Having
+      // a config defaults compareOn to true (brief §要点); calibrating is
+      // per-session UI state, always false on a fresh tree.
+      compareVideoId: a.compare_video_id ?? null,
+      compareOffsetMs: a.compare_offset_ms ?? 0,
+      compareOn: a.compare_video_id != null,
+      calibrating: false,
     })
   },
   // Clears the per-video session window. `entryMode` is intentionally left
@@ -137,6 +180,9 @@ export const useSession = create<Session>((set, get) => ({
       analysis: null, laneId: null, takeId: null, selectedMarkId: null,
       playheadMs: 0, showAggregate: false, abLoop: emptyAbLoop(),
       lastEntry: null, flashMarks: {}, hintText: null,
+      // M12 §要点: "clearAnalysis 全部复位" — no analysis means no compare
+      // config, so all four fields go back to their empty defaults.
+      compareVideoId: null, compareOffsetMs: 0, compareOn: false, calibrating: false,
     })
   },
   // 换泳道也隐含换 take（见下方 takeId 赋值）—— lastEntry 同样要归零，理由
@@ -209,6 +255,25 @@ export const useSession = create<Session>((set, get) => ({
   // 切 take 归零" needs — no separate module-level counter to keep in sync.
   recordEntry: label => set(s => ({ lastEntry: { label, count: (s.lastEntry?.count ?? 0) + 1 } })),
   setFrameMs: ms => set({ frameMs: ms }),
+  // See interface doc: deliberately narrow — only touches compare fields
+  // (+ their analysis.compare_* mirror) so saving/updating a compare config
+  // never disturbs the user's current lane/take/selection, unlike a full
+  // setAnalysis replace.
+  setCompareConfig: (videoId, offsetMs) => set(s => ({
+    compareVideoId: videoId, compareOffsetMs: offsetMs, compareOn: true,
+    analysis: s.analysis && { ...s.analysis, compare_video_id: videoId, compare_offset_ms: offsetMs },
+  })),
+  clearCompareConfig: () => set(s => ({
+    compareVideoId: null, compareOffsetMs: 0, compareOn: false,
+    analysis: s.analysis && { ...s.analysis, compare_video_id: null, compare_offset_ms: null },
+  })),
+  // Same guarded-toggle shape as toggleLoop: turning off always succeeds;
+  // turning on requires a config to already exist (compareVideoId != null).
+  toggleCompareOn: () => set(s => {
+    if (s.compareOn) return { compareOn: false }
+    return s.compareVideoId != null ? { compareOn: true } : {}
+  }),
+  setCalibrating: on => set({ calibrating: on }),
   // Ordering guard lives HERE (not in hotkeys.ts) so both entry points —
   // the I/O hotkeys today, anything else calling these later — are safe by
   // construction: it's impossible to reach an inverted A>=B range through
