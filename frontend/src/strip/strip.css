@@ -2,8 +2,7 @@
 
 .strip {
   position: relative;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden; /* M11 修复：不再横向滚动——精灵图撑满容器宽度，见 .strip img */
   display: flex;
   align-items: center;
   border-radius: var(--radius-m);
@@ -11,7 +10,11 @@
   cursor: col-resize;
   touch-action: none; /* 指针捕获期间禁用浏览器手势接管（如触屏滚动/缩放） */
 }
-.strip img { display: block; }
+/* 精灵图原生宽度=thumbW*count 常常远大于带的渲染宽度（如 6336px vs 935px）；
+   之前按原生宽度铺满导致横向滚动，使"整段可 scrub"名不副实——只暴露了视频
+   前 ~15%。压到 100% 容器宽度后缩略图会被压扁，但这条带本就是导航纹理，
+   不是画面预览（监视器才是），压扁可接受。 */
+.strip img { display: block; width: 100%; }
 
 .strip-progress {
   position: absolute;
@@ -22,7 +25,8 @@
   pointer-events: none;
 }
 
-/* 播放头针线（M11 任务 1）：全高 2px 竖线 + 顶部小握把圆点，随 progress*w 移动。 */
+/* 播放头针线（M11 任务 1）：全高 2px 竖线 + 顶部小握把圆点，left 用 progress
+   百分比（容器渲染宽度的 %），而非像素——修复版不再依赖精灵原生宽度。 */
 .strip-needle {
   position: absolute;
   top: 0;
@@ -44,7 +48,8 @@
   transform: translate(-50%, 0);
 }
 
-/* 悬停/拖动时码气泡：跟随光标 x，贴在带内顶部（overflow-y: hidden 之内，避免被裁）。 */
+/* 悬停/拖动时码气泡：跟随光标 x（像素，测量自当次指针事件的容器渲染宽
+   度），贴在带内顶部（overflow: hidden 之内，避免被裁）。 */
 .strip-hover-tc {
   position: absolute;
   top: 4px;
