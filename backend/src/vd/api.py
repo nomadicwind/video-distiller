@@ -1,5 +1,7 @@
 import json
+import os
 import re
+import sys
 import threading
 import time
 from pathlib import Path
@@ -7,6 +9,7 @@ from typing import Iterator, Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from vd import agent, align, aggregate as agg, db, ingest, store, discover, matcher, ops as ops_module
@@ -815,3 +818,33 @@ def capture_stop(conn=Depends(get_conn)):
                            original_path=path)
     ingest.process(v["id"])
     return store.get_video(conn, v["id"])
+
+
+# ---- 前端静态托管（M13：Windows 打包）----
+#
+# ⚠ 必须在全部 /api 路由注册完毕后才能挂载：StaticFiles(html=True) 挂在
+# "/" 上会兜底任意未匹配路径，若挂载提前，会在路由查找阶段抢在 /api/* 之前
+# （事实上不会，因为 FastAPI 按注册顺序 + 更具体路径优先匹配；但把它放在
+# 模块末尾可以让这份不变量一目了然，不依赖路由匹配算法的细节）。
+# 目录解析顺序（不是“依次尝试兜底”，是互斥优先级——选中哪一级就只看那一
+# 级是否有 index.html，不落到下一级）：
+#   1. 环境变量 VD_WEB_DIST 显式指定
+#   2. 冻结态（PyInstaller onedir，getattr(sys, 'frozen', False)）：
+#      打包目录（_MEIPASS 或 exe 所在目录）下的 webdist/
+#   3. 仓库开发路径 frontend/dist
+# 缺 index.html 时返回 None，完全跳过挂载 —— 纯 API 模式与今天的现状逐字节
+# 一致（GET / 404，/api/* 不受影响）。
+def _web_dist() -> Path | None:
+    env = os.environ.get("VD_WEB_DIST")
+    if env:
+        candidate = Path(env)
+    elif getattr(sys, "frozen", False):
+        candidate = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "webdist"
+    else:
+        candidate = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+    return candidate if (candidate / "index.html").exists() else None
+
+
+_dist = _web_dist()
+if _dist is not None:
+    app.mount("/", StaticFiles(directory=str(_dist), html=True), name="web")

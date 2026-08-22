@@ -40,7 +40,45 @@ def default_runner(cmd: list[str]) -> None:
         raise RuntimeError(f"yt-dlp 失败：{tail}") from e
 
 
-def pull_bilibili(url: str, dest: Path, runner=default_runner) -> Path:
+def _ytdlp_opts_from_argv(argv: list[str]) -> tuple[dict, str]:
+    """把子进程风格的 argv（pull_bilibili 统一构造的那份）解析成 yt_dlp
+    Python API 的等价 opts，避免为冻结/非冻结两条路径各写一套参数拼接。"""
+    url = argv[-1]
+    flag_to_key = {
+        "-f": "format",
+        "--merge-output-format": "merge_output_format",
+        "-o": "outtmpl",
+    }
+    opts: dict = {}
+    i = 0
+    while i < len(argv) - 1:
+        key = flag_to_key.get(argv[i])
+        if key is not None:
+            opts[key] = argv[i + 1]
+            i += 2
+        else:
+            i += 1
+    return opts, url
+
+
+def _run_ytdlp(argv: list[str]) -> None:
+    """冻结态（PyInstaller 打包后）sys.executable 是打包出的 exe 自身，不能
+    再 `-m yt_dlp` 子进程调用自己 —— 改走 yt_dlp Python API，同语义下载；
+    非冻结沿用现状子进程调用，保持 runner 注入测试口径不变。"""
+    if getattr(sys, "frozen", False):
+        import yt_dlp  # 延迟导入：非冻结路径/常规测试不需要，也便于测试 monkeypatch 假模块
+
+        opts, url = _ytdlp_opts_from_argv(argv)
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.download([url])
+        except Exception as e:  # noqa: BLE001 —— 与子进程分支保持同样的错误语义
+            raise RuntimeError(f"yt-dlp 失败：{e}") from e
+        return
+    default_runner(argv)
+
+
+def pull_bilibili(url: str, dest: Path, runner=_run_ytdlp) -> Path:
     """B 站拉取（spec §4.4：仅 B 站；抖音走手动上传）。"""
     runner([
         sys.executable, "-m", "yt_dlp",
