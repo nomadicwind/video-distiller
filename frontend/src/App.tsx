@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ArrowLeft, Film, Link as LinkIcon, Upload } from 'lucide-react'
+import { clearCompare, saveCompare } from './actions'
 import { api } from './api/client'
 import type { Video, Aggregate, Keymap } from './api/types'
 import { useHotkeys } from './hotkeys'
-import { Player } from './player/Player'
+import { computeOffset } from './player/compare'
+import { useLiveMs, videoElB } from './player/ComparePlayer'
+import { Player, videoEl } from './player/Player'
 import { Transport } from './player/Transport'
 import { ThumbStrip } from './strip/ThumbStrip'
 import { Timeline } from './timeline/Timeline'
@@ -27,9 +30,136 @@ import { Card } from './ui/Card'
 import { Field } from './ui/Field'
 import { Badge } from './ui/Badge'
 import { EmptyState } from './ui/EmptyState'
+import { Switch } from './ui/Switch'
 import { Tabs } from './ui/Tabs'
 import { Tooltip } from './ui/Tooltip'
 import { fmtTc } from './time/frames'
+
+/** 对比视频下拉里名称的截断上限（M12 任务 3），同 PlaybooksPage.tsx 的
+ * ellipsize 惯例——完整原文没有 tooltip 容身之处（原生 <option> 不支持），
+ * 保持和其它下拉一样短即可，不需要跟 40 字符那条对齐。 */
+const COMPARE_NAME_ELLIPSIS_LEN = 16
+const ellipsizeVideoName = (s: string): string =>
+  s.length > COMPARE_NAME_ELLIPSIS_LEN ? `${s.slice(0, COMPARE_NAME_ELLIPSIS_LEN)}…` : s
+
+/** `<select>`「选择对比视频」下拉里代表「清除对比」的哨兵值——与任何真实
+ * video id 都不会冲突（真实 id 是后端生成的 uuid/ulid，不含这个前缀）。 */
+const CLEAR_COMPARE_VALUE = '__clear_compare__'
+
+/**
+ * 对比条（M12 任务 3，spec 见 task-3-brief §要点 / global-constraints
+ * §UI 位置）：Transport 行之下的独立 grid 行，仅工作台有。Switch 始终可点
+ * ——无配置时点击只引导（setHintText），不静默吞掉；有配置时正常切
+ * compareOn。选视频/清除对比走 saveCompare/clearCompare（actions.ts，PATCH
+ * 成功后才落地本地状态）。校准/偏移/B 时码这组控件只在 compareOn 且已配置
+ * 时展示——此时 Player 那边的 ComparePlayer 也已经挂载，vd-video-b 在 DOM
+ * 里真实存在，videoElB() 不会读到 null。
+ */
+function CompareBar({ video }: { video: Video }): JSX.Element {
+  const compareOn = useSession(s => s.compareOn)
+  const compareVideoId = useSession(s => s.compareVideoId)
+  const compareOffsetMs = useSession(s => s.compareOffsetMs)
+  const calibrating = useSession(s => s.calibrating)
+  const playheadMs = useSession(s => s.playheadMs)
+  const setHintText = useSession(s => s.setHintText)
+  const setCalibrating = useSession(s => s.setCalibrating)
+  const toggleCompareOn = useSession(s => s.toggleCompareOn)
+  const [videos, setVideos] = useState<Video[]>([])
+  const [offsetInput, setOffsetInput] = useState(String(compareOffsetMs))
+  const extendedControlsShown = compareOn && compareVideoId != null
+  const bMs = useLiveMs(videoElB, extendedControlsShown)
+
+  useEffect(() => { void api.listVideos().then(setVideos) }, [])
+  // 偏移可能被 −1帧/+1帧 或「以当前两帧对齐」在别处改动（saveCompare 落地
+  // 后 store 里的 compareOffsetMs 会变）——本地编辑缓冲区跟着同步，否则刚
+  // 点完对齐这里还显示编辑前的旧值。
+  useEffect(() => { setOffsetInput(String(compareOffsetMs)) }, [compareOffsetMs])
+
+  const fps = video.fps ?? 30
+  const readyVideos = videos.filter(v => v.status === 'ready' && v.id !== video.id)
+
+  const onSwitchToggle = () => {
+    if (!compareVideoId) { setHintText('请先在下方选择一个对比视频'); return }
+    toggleCompareOn()
+  }
+  const onSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    if (!val) return
+    if (val === CLEAR_COMPARE_VALUE) { void clearCompare(); return }
+    void saveCompare(val, 0)
+  }
+  const onToggleCalibrate = () => {
+    if (!compareVideoId) return
+    // global-constraints §校准流：校准态下主播放暂停，避免 A 边跑边校。
+    if (!calibrating) videoEl()?.pause()
+    setCalibrating(!calibrating)
+  }
+  const onAlign = () => {
+    if (!compareVideoId) return
+    const b = videoElB()
+    if (!b) return
+    void saveCompare(compareVideoId, computeOffset(playheadMs, b.currentTime * 1000))
+  }
+  // M12 复查修复 B：数字解析必须在调 saveCompare 之前校验——非数字输入（含
+  // 清空后失焦）一律不发请求，走既有的 hintText 提示机制，而不是把 NaN/0
+  // 悄悄存下去。
+  const commitOffset = () => {
+    if (!compareVideoId) return
+    const trimmed = offsetInput.trim()
+    const parsed = Number(trimmed)
+    if (trimmed === '' || !Number.isFinite(parsed)) {
+      setHintText('偏移须为数字（ms）')
+      setOffsetInput(String(compareOffsetMs))
+      return
+    }
+    const rounded = Math.round(parsed)
+    setOffsetInput(String(rounded))
+    if (rounded !== compareOffsetMs) void saveCompare(compareVideoId, rounded)
+  }
+  const nudgeOffset = (dir: 1 | -1) => {
+    if (!compareVideoId) return
+    void saveCompare(compareVideoId, Math.round(compareOffsetMs + dir * (1000 / fps)))
+  }
+
+  return (
+    <div className="compare-bar">
+      <Switch checked={compareOn} onChange={onSwitchToggle} label="对比" />
+      <select
+        aria-label="选择对比视频"
+        value={compareVideoId ?? ''}
+        onChange={onSelectChange}
+      >
+        <option value="">选择对比视频</option>
+        {readyVideos.map(v => (
+          <option key={v.id} value={v.id}>{`video-${v.seq} · ${ellipsizeVideoName(v.name)}`}</option>
+        ))}
+        {compareVideoId && <option value={CLEAR_COMPARE_VALUE}>清除对比</option>}
+      </select>
+      {extendedControlsShown && (
+        <>
+          <Button variant="ghost" size="sm" active={calibrating} onClick={onToggleCalibrate}>校准</Button>
+          {calibrating && (
+            <Button variant="primary" size="sm" onClick={onAlign}>以当前两帧对齐</Button>
+          )}
+          <span className="compare-offset-label">偏移</span>
+          <input
+            type="number"
+            className="mono"
+            aria-label="偏移 ms"
+            value={offsetInput}
+            onChange={e => setOffsetInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            onBlur={commitOffset}
+          />
+          <span className="compare-offset-unit">ms</span>
+          <Button variant="ghost" size="sm" onClick={() => nudgeOffset(-1)}>−1帧</Button>
+          <Button variant="ghost" size="sm" onClick={() => nudgeOffset(1)}>+1帧</Button>
+          <span className="compare-b-tc mono">B {fmtTc(bMs)}</span>
+        </>
+      )}
+    </div>
+  )
+}
 
 type InspectorTab = 'annotate' | 'infer'
 const INSPECTOR_TABS: { key: InspectorTab; label: string }[] = [
@@ -227,13 +357,16 @@ function Workbench({ video }: { video: Video }) {
   return (
     <div className="workbench">
       <div className="workbench-grid" ref={gridRef} style={{
-        gridTemplateRows: `minmax(0, 1fr) auto auto 6px ${tlH != null ? `${clampTlHeight(tlH, window.innerHeight)}px` : 'auto'}`,
+        gridTemplateRows: `minmax(0, 1fr) auto auto auto 6px ${tlH != null ? `${clampTlHeight(tlH, window.innerHeight)}px` : 'auto'}`,
       }}>
         <div className="workbench-pane workbench-monitor">
           <Player video={video} />
         </div>
         <div className="workbench-pane workbench-transport">
           <Transport video={video} />
+        </div>
+        <div className="workbench-pane workbench-compare">
+          <CompareBar video={video} />
         </div>
         <div className="workbench-pane workbench-strip">
           <ThumbStrip video={video} />

@@ -29,6 +29,84 @@
 /* 全屏时容器占满屏幕，圆角反而在四角露出黑边——去掉（M11 任务 3）。 */
 .monitor:fullscreen { border-radius: 0; }
 
+/*
+ * ---------- 对比分栏（M12 任务 3） ----------
+ * .monitor-compare 只切 flex-direction，不动 .monitor 自身其它规则（背景/
+ * 圆角/overflow 保持单模式一致）；A 的 <video>（.monitor 的第一个直接子
+ * 节点）与 B 的包装 div 各占一半，`min-width: 0` 防止内容把 flex 子项撑
+ * 宽。全屏仍作用于整个 .monitor 容器，双画面一起进出全屏。
+ */
+.monitor.monitor-compare {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 2px;
+}
+.monitor.monitor-compare > video,
+.monitor.monitor-compare > .monitor-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+}
+.monitor-pane {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+}
+.monitor-pane video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* 出界遮罩（global-constraints §偏移语义唯一）：B 暂停，半透明底 + 居中小字，
+ * 不拦截指针（校准态下不会渲染这个遮罩，见 ComparePlayer.tsx）。 */
+.compare-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-inset) 72%, transparent);
+  color: var(--text-2);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* 校准态下沿的独立定位条（B 专用，覆盖在 B 格底部）。 */
+.compare-calib-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  border-top: 1px solid var(--border-subtle);
+}
+.compare-calib-track {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--bg-control);
+  cursor: pointer;
+  touch-action: none;
+}
+.compare-calib-progress {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.compare-calib-tc { flex-shrink: 0; color: var(--text-1); font-size: 11px; }
+
 /* ---------- Transport bar ---------- */
 .transport {
   display: flex;

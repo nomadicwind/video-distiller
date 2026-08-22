@@ -276,17 +276,18 @@ canvas { display: block; }
 }
 
 /*
- * grid-template-rows here is the static fallback for the 5-row frame (M11
- * 分割条 adds row 4, a 6px splitter, pushing the timeline to row 5) — the
- * real, resizable row template is set inline on this div from Workbench
- * state (App.tsx: `tlH`), which overrides this rule whenever it applies.
- * This declaration only matters before that state settles or if JS fails,
- * so it mirrors the inline default (`auto` for the timeline row).
+ * grid-template-rows here is the static fallback for the 6-row frame (M11
+ * 分割条 added a 6px splitter row; M12 任务 3 inserts the 对比条 row between
+ * transport and strip) — the real, resizable row template is set inline on
+ * this div from Workbench state (App.tsx: `tlH`), which overrides this rule
+ * whenever it applies. This declaration only matters before that state
+ * settles or if JS fails, so it mirrors the inline default (`auto` for the
+ * timeline row).
  */
 .workbench-grid {
   display: grid;
   grid-template-columns: 1fr 320px;
-  grid-template-rows: minmax(0, 1fr) auto auto 6px auto;
+  grid-template-rows: minmax(0, 1fr) auto auto auto 6px auto;
   gap: 1px;
   background: var(--bg-app);
   flex: 1;
@@ -316,15 +317,22 @@ canvas { display: block; }
 .workbench-monitor { grid-column: 1; grid-row: 1; padding: 12px 12px 8px; min-width: 0; min-height: 0; }
 .workbench-transport { grid-column: 1; grid-row: 2; padding: 0 12px 8px; min-width: 0; }
 /*
+ * 对比条（M12 任务 3）：位于 Transport 与缩略图带之间，auto 高度——本身没有
+ * 配置时只显示 Switch + 选择视频下拉，内容矮；对比开启后展开校准/偏移等
+ * 控件，行高随内容自然增长，监视器行（唯一的 minmax(0,1fr) 弹性轨道）弹性
+ * 吸收差值，其余行/列不需要重新计算。
+ */
+.workbench-compare { grid-column: 1; grid-row: 3; padding: 0 12px 8px; min-width: 0; }
+/*
  * Row 1 (monitor) is the grid's only flexible track — it absorbs whatever
- * space transport/strip/timeline don't need and shrinks first on a short
- * viewport, so rows 2-4 (all auto-sized off real content) and the timeline
- * in particular always stay fully visible. The strip keeps a fixed content
- * height; bottom-align it within its row so any leftover slack reads as
- * breathing room above it rather than a dead gap before the timeline.
+ * space transport/对比条/strip/timeline don't need and shrinks first on a
+ * short viewport, so rows 2-5 (all auto-sized off real content) and the
+ * timeline in particular always stay fully visible. The strip keeps a fixed
+ * content height; bottom-align it within its row so any leftover slack reads
+ * as breathing room above it rather than a dead gap before the timeline.
  */
 .workbench-strip {
-  grid-column: 1; grid-row: 3; padding: 0 12px 12px; min-width: 0; min-height: 0;
+  grid-column: 1; grid-row: 4; padding: 0 12px 12px; min-width: 0; min-height: 0;
   display: flex; align-items: flex-end;
 }
 /*
@@ -338,7 +346,10 @@ canvas { display: block; }
  */
 .workbench-inspector {
   grid-column: 2;
-  grid-row: 1 / 4;
+  /* M12 任务 3: 对比条插入为新的第 3 行后，Inspector 的纵向跨度相应下移一
+     行，继续覆盖 monitor/transport/对比条/strip 四行（仍在分割条之前止步，
+     与 M11 一致）。 */
+  grid-row: 1 / 5;
   padding: 12px;
   overflow-y: auto;
   min-width: 0;
@@ -357,7 +368,7 @@ canvas { display: block; }
  */
 .workbench-splitter {
   grid-column: 1 / -1;
-  grid-row: 4;
+  grid-row: 5;
   position: relative;
   cursor: row-resize;
   background: transparent;
@@ -379,12 +390,26 @@ canvas { display: block; }
 
 .workbench-timeline {
   grid-column: 1 / -1;
-  grid-row: 5;
+  grid-row: 6;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
+
+/* ---------- 对比条内容（M12 任务 3） ---------- */
+.compare-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 28px;
+}
+.compare-bar select { max-width: 220px; }
+.compare-offset-label { color: var(--text-2); font-size: 12px; white-space: nowrap; }
+.compare-offset-unit { color: var(--text-3); font-size: 12px; }
+.compare-bar input[type='number'] { width: 84px; }
+.compare-b-tc { color: var(--text-2); font-size: 12px; white-space: nowrap; }
 
 /*
  * ---------- Inspector / EntryPanel (spec §5.2) ----------

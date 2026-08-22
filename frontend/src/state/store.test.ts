@@ -322,7 +322,9 @@ test('setAnalysis with no compare config leaves compare state at its empty defau
 
 test('setAnalysis with a compare config present initializes compareOn=true from analysis.compare_*', () => {
   const s = useSession.getState()
-  s.setAnalysis(structuredClone({ ...tree, compare_video_id: 'vid_2', compare_offset_ms: 1500 }))
+  // Different id from beforeEach's fixture — a genuine video switch, not a
+  // same-id refetch (see the two tests below for that distinction).
+  s.setAnalysis(structuredClone({ ...tree, id: 'an_2', compare_video_id: 'vid_2', compare_offset_ms: 1500 }))
   const after = useSession.getState()
   expect(after.compareVideoId).toBe('vid_2')
   expect(after.compareOffsetMs).toBe(1500)
@@ -381,6 +383,37 @@ test('toggleCompareOn refuses to turn on without a compareVideoId, but off alway
   expect(useSession.getState().compareOn).toBe(false) // off always allowed
   s.toggleCompareOn()
   expect(useSession.getState().compareOn).toBe(true) // config now exists, on is allowed again
+})
+
+test('setAnalysis with the SAME analysis id (a refetch) preserves a manually-toggled-off compareOn', () => {
+  const s = useSession.getState()
+  // Establish a fresh analysis (different id from beforeEach's fixture — a
+  // genuine video switch) with a compare config already on the tree, then
+  // the user turns compareOn off in this session.
+  s.setAnalysis(structuredClone({ ...tree, id: 'an_2', compare_video_id: 'vid_2', compare_offset_ms: 1500 }))
+  expect(useSession.getState().compareOn).toBe(true)
+  s.toggleCompareOn()
+  expect(useSession.getState().compareOn).toBe(false)
+  // A refetch of the SAME analysis id (e.g. keymap rebind's
+  // getAnalysis().then(setAnalysis)) with the same compare config must not
+  // silently flip compareOn back on.
+  s.setAnalysis(structuredClone({ ...tree, id: 'an_2', compare_video_id: 'vid_2', compare_offset_ms: 1500 }))
+  const after = useSession.getState()
+  expect(after.compareOn).toBe(false)
+  expect(after.compareVideoId).toBe('vid_2')
+  expect(after.compareOffsetMs).toBe(1500)
+})
+
+test('setAnalysis with a DIFFERENT analysis id still re-derives compareOn from the new tree', () => {
+  const s = useSession.getState()
+  s.setAnalysis(structuredClone({ ...tree, id: 'an_2', compare_video_id: 'vid_2', compare_offset_ms: 1500 }))
+  expect(useSession.getState().compareOn).toBe(true)
+  s.toggleCompareOn()
+  expect(useSession.getState().compareOn).toBe(false)
+  s.setAnalysis(structuredClone({ ...tree, id: 'an_3', compare_video_id: 'vid_3', compare_offset_ms: 0 }))
+  const after = useSession.getState()
+  expect(after.compareOn).toBe(true) // genuine switch: re-derived from the new tree's config
+  expect(after.compareVideoId).toBe('vid_3')
 })
 
 test('setCalibrating flips the flag independently of compare config', () => {

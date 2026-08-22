@@ -146,6 +146,19 @@ export const useSession = create<Session>((set, get) => ({
     // or a hint scheduled just before the switch would still land ~3s later
     // and clear whatever the new video's own hint set in the meantime.
     if (hintTimer) { clearTimeout(hintTimer); hintTimer = null }
+    // M12 任务 3 复查修复：a *refetch* of the SAME analysis id (e.g.
+    // WorkbenchTopContext's keymap-bind handler does
+    // api.getAnalysis(id).then(setAnalysis)) must not clobber a compareOn
+    // the user already toggled off in this session — re-deriving compareOn
+    // from a.compare_video_id unconditionally silently reverted a user's
+    // "关闭对比" back to on every time an unrelated PATCH round-tripped
+    // through setAnalysis. Only a genuinely different analysis (a real video
+    // switch) re-derives compareOn from whether a compare config exists on
+    // the incoming tree; compareVideoId/compareOffsetMs still always mirror
+    // the incoming tree either way, same as before.
+    const prev = get()
+    const sameAnalysis = prev.analysis?.id === a.id
+    const compareVideoId = a.compare_video_id ?? null
     set({
       analysis: a, laneId: lane?.id ?? null, takeId: take?.id ?? null, selectedMarkId: null,
       // A-B loop marks are per-video too — carrying them into a different
@@ -160,11 +173,15 @@ export const useSession = create<Session>((set, get) => ({
       // M12: a new analysis carries its own compare config (or none) — a
       // stale compareVideoId/compareOffsetMs from the previous video would
       // otherwise point B at a video/offset that means nothing here. Having
-      // a config defaults compareOn to true (brief §要点); calibrating is
-      // per-session UI state, always false on a fresh tree.
-      compareVideoId: a.compare_video_id ?? null,
+      // a config defaults compareOn to true on a genuine switch (brief
+      // §要点); on a same-id refetch the user's current compareOn survives
+      // instead (see comment above) — clamped to false if the refetch
+      // somehow shows no config, since compareOn can never be true without
+      // one (same invariant toggleCompareOn enforces). calibrating is
+      // per-session UI state, always false on any setAnalysis call.
+      compareVideoId,
       compareOffsetMs: a.compare_offset_ms ?? 0,
-      compareOn: a.compare_video_id != null,
+      compareOn: sameAnalysis ? (prev.compareOn && compareVideoId != null) : compareVideoId != null,
       calibrating: false,
     })
   },

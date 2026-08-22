@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { Video } from '../api/types'
 import { useSession } from '../state/store'
 import { stepFrame } from '../time/frames'
+import { ComparePlayer } from './ComparePlayer'
 
 export function videoEl(): HTMLVideoElement | null {
   return document.getElementById('vd-video') as HTMLVideoElement | null
@@ -134,6 +135,21 @@ export function auditionMark(tMs: number, durationMs: number): void {
 export function Player({ video }: { video: Video }): JSX.Element {
   const ref = useRef<HTMLVideoElement>(null)
   const setPlayhead = useSession(s => s.setPlayhead)
+  const compareOn = useSession(s => s.compareOn)
+  const compareVideoId = useSession(s => s.compareVideoId)
+  const [compareVideo, setCompareVideo] = useState<Video | null>(null)
+
+  // M12 任务 3：对比视频（B）的 fps/时长——A 的 `video` prop 只描述主视频，
+  // ComparePlayer 的跟随/校准计算需要 B 自己的这两个值，这里按
+  // compareVideoId 独立取一次。切走/清除对比时置空，避免残留上一段对比视频
+  // 的时长驱动越界判断（陈旧 durationMs 会让 followTarget 算出错误的
+  // inRange）。
+  useEffect(() => {
+    if (!compareVideoId) { setCompareVideo(null); return }
+    let ignore = false
+    void api.getVideo(compareVideoId).then(v => { if (!ignore) setCompareVideo(v) })
+    return () => { ignore = true }
+  }, [compareVideoId])
 
   useEffect(() => {
     const v = ref.current
@@ -175,10 +191,29 @@ export function Player({ video }: { video: Video }): JSX.Element {
   }, [setPlayhead, video.id])
 
   const ratio = video.width && video.height ? `${video.width} / ${video.height}` : '16 / 9'
+  // compareOn=false 时这里必须渲染出与 M11 完全一致的 DOM（无分栏包装、无
+  // aspectRatio 覆盖之外的任何差异）——A 的 <video> 始终是 .monitor 的第一个
+  // 直接子节点，无论对比是否开启，这样切换对比开关不会导致 React 因为父级
+  // 结构变化而卸载/重挂载它（否则每次开关对比都会丢失 A 的播放位置）。B 格
+  // 作为第二个子节点条件渲染，纯追加，不影响 A 节点在子节点列表中的位置。
+  const showCompare = compareOn && compareVideoId != null
 
   return (
-    <div className="monitor" style={{ aspectRatio: ratio }} onDoubleClick={toggleMonitorFullscreen}>
+    <div
+      className={showCompare ? 'monitor monitor-compare' : 'monitor'}
+      style={showCompare ? undefined : { aspectRatio: ratio }}
+      onDoubleClick={toggleMonitorFullscreen}
+    >
       <video ref={ref} id="vd-video" src={api.videoFileUrl(video.id)} />
+      {showCompare && compareVideoId && (
+        <div className="monitor-pane">
+          <ComparePlayer
+            videoId={compareVideoId}
+            durationMs={compareVideo?.duration_ms ?? 0}
+            fps={compareVideo?.fps ?? 30}
+          />
+        </div>
+      )}
     </div>
   )
 }

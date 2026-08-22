@@ -54,6 +54,14 @@ _Avoid_: 剪辑、clip
 独立于 IR 的纯测量草稿点，用于量间隔，可随时清空。
 _Avoid_: 标记（与 Mark 混淆）
 
+**对比模式（Compare Mode）**:
+监视器分栏并排显示主视频（A）与对比视频（B），供跨录像同段落画面核对。
+_Avoid_: 分屏、split-screen
+
+**对比偏移（Compare Offset）**:
+唯一语义 `tB = tA + offset_ms` 驱动 B 跟随 A；B 恒定静音、无原生播放控件，任何 B 端操作不反向驱动 A（校准态是唯一例外，退出即恢复跟随）。
+_Avoid_: 时间差、time shift
+
 ### 游戏知识
 
 **Skill Catalog（技能目录）**:
