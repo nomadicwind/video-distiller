@@ -5,11 +5,13 @@ api.py 的 FastAPI app 在模块导入时构建，_web_dist() 的解析结果也
 结果，必须用 importlib.reload 重建 vd.api 模块，而不是只 monkeypatch 环境
 变量（环境变量本身不会让已经 import 过的模块重新跑一遍顶层代码）。
 
-每个改写了 vd.api 全局状态的测试都在结束时把模块重建回“纯 API 模式”
-（VD_WEB_DIST 指向一个必定不存在 index.html 的临时目录），避免残留的静态
-挂载影响同一进程里其后运行、经由 conftest.client 拿到 `from vd.api import
-app` 的其它测试——尤其是本地开发机上 frontend/dist 可能确实存在的情况，
-不能让那份本地状态泄漏进测试结果。
+conftest.py 的 autouse fixture 已经把整套测试默认状态钉死在
+VD_WEB_DIST=""（纯 API，三态里的“显式禁用”），所以本文件里每个改写了这个
+环境变量去验证挂载行为的测试，都要在结束时把模块重建回同一个纯 API 状态
+——不能依赖 monkeypatch 在测试结束时自动 unset 环境变量：那只会让 os.environ
+恢复，vd.api 模块里已经 mount 好的 app 对象并不会跟着自动重建，会残留给同
+一进程里后面才跑的测试（尤其是经由 conftest.client 拿到 `from vd.api import
+app` 的那些）。
 """
 import importlib
 import subprocess
@@ -23,6 +25,8 @@ from vd import ingest, serve
 
 
 def _rebuild_api(monkeypatch, web_dist):
+    """web_dist 三态：None=删除环境变量（走“未设置”分支的自动解析）；""
+    （空字符串）=显式禁用，不做任何回退；其余按字符串路径设为 VD_WEB_DIST。"""
     if web_dist is None:
         monkeypatch.delenv("VD_WEB_DIST", raising=False)
     else:
@@ -34,7 +38,7 @@ def _rebuild_api(monkeypatch, web_dist):
 
 
 @pytest.fixture
-def rebuild_api(monkeypatch, tmp_path):
+def rebuild_api(monkeypatch):
     built: list = []
 
     def _build(web_dist):
@@ -43,10 +47,9 @@ def rebuild_api(monkeypatch, tmp_path):
         return api
 
     yield _build
-    # 无论测试是否手动恢复过，兜底把模块状态重建回纯 API 模式，指向一个
-    # 保证不存在的目录 —— 显式 env 优先级最高，不会被本机 frontend/dist
-    # 是否存在影响。
-    _rebuild_api(monkeypatch, tmp_path / "___no_such_dist___")
+    # 无论测试是否手动恢复过，兜底把模块状态重建回纯 API 模式 —— 用官方的
+    # “空字符串禁用”三态分支，不依赖本机 frontend/dist 是否存在。
+    _rebuild_api(monkeypatch, "")
 
 
 def test_static_dist_served_when_present(data_dir, rebuild_api, tmp_path):
@@ -70,6 +73,16 @@ def test_no_dist_is_pure_api_mode(data_dir, rebuild_api, tmp_path):
         assert c.get("/api/videos").status_code == 200
 
 
+def test_empty_web_dist_disables_static_serving_without_fallback(data_dir, rebuild_api):
+    """VD_WEB_DIST="" 是显式禁用：即便冻结态/开发路径回退本来能找到一份
+    index.html，也必须直接返回 None，不做任何回退尝试。"""
+    api = rebuild_api("")
+    assert api._web_dist() is None
+    with TestClient(api.app) as c:
+        assert c.get("/").status_code == 404
+        assert c.get("/api/videos").status_code == 200
+
+
 def test_serve_main_defaults_port_and_schedules_browser(monkeypatch):
     calls = {}
 
@@ -80,25 +93,33 @@ def test_serve_main_defaults_port_and_schedules_browser(monkeypatch):
 
     monkeypatch.setattr(serve.uvicorn, "run", fake_run)
 
-    timers = []
+    created = []
 
     class FakeTimer:
         def __init__(self, interval, fn, args=()):
-            timers.append((interval, fn, args))
+            self.interval = interval
+            self.fn = fn
+            self.args = args
+            self.daemon = False
+            self.started = False
+            created.append(self)
 
         def start(self):
-            pass
+            self.started = True
 
     monkeypatch.setattr(serve.threading, "Timer", FakeTimer)
 
     serve.main([])
 
     assert calls == {"app": serve.app, "host": "127.0.0.1", "port": 8000}
-    assert len(timers) == 1
-    interval, fn, args = timers[0]
-    assert interval == 1.5
-    assert fn is serve.webbrowser.open
-    assert args == ("http://127.0.0.1:8000",)
+    assert len(created) == 1
+    timer = created[0]
+    assert timer.interval == 1.5
+    assert timer.fn is serve.webbrowser.open
+    assert timer.args == ("http://127.0.0.1:8000",)
+    # daemon=True 是本轮修复的要点：非 daemon 线程会让进程退出多等最多 1.5s。
+    assert timer.daemon is True
+    assert timer.started is True
 
 
 def test_serve_main_custom_port_and_no_browser_skips_timer(monkeypatch):

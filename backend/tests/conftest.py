@@ -1,6 +1,17 @@
+import os
 import subprocess
 
 import pytest
+
+# M13：vd.api 在 import 时依据 VD_WEB_DIST 决定是否挂载静态前端
+# （见 vd.api._web_dist 的三态文档）。测试套件不该依赖“本机是否已经
+# pnpm build 过前端”这种环境差异——这里在 conftest 模块加载时就强制
+# 禁用一次，保证它先于本目录任何 test_*.py 模块被 collect/import（进
+# 而可能间接 import vd.api，例如 test_serve_static.py 顶部
+# `from vd import serve` 会连带 import vd.api）：只在 autouse fixture
+# 里设置是不够的，fixture 要到测试运行阶段才生效，晚于 collect 阶段的
+# 模块级 import。
+os.environ["VD_WEB_DIST"] = ""
 
 
 @pytest.fixture(autouse=True)
@@ -9,6 +20,14 @@ def data_dir(tmp_path, monkeypatch):
     d = tmp_path / "data"
     monkeypatch.setenv("VD_DATA_DIR", str(d))
     return d
+
+
+@pytest.fixture(autouse=True)
+def _pure_api_by_default(monkeypatch):
+    """默认纯 API 模式（不挂载静态前端）。需要挂载的测试自行
+    monkeypatch.setenv("VD_WEB_DIST", ...) 后 reload vd.api 模块选择性
+    开启（见 test_serve_static.py 的 rebuild_api fixture）。"""
+    monkeypatch.setenv("VD_WEB_DIST", "")
 
 
 @pytest.fixture(scope="session")

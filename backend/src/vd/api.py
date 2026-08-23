@@ -826,20 +826,30 @@ def capture_stop(conn=Depends(get_conn)):
 # "/" 上会兜底任意未匹配路径，若挂载提前，会在路由查找阶段抢在 /api/* 之前
 # （事实上不会，因为 FastAPI 按注册顺序 + 更具体路径优先匹配；但把它放在
 # 模块末尾可以让这份不变量一目了然，不依赖路由匹配算法的细节）。
-# 目录解析顺序（不是“依次尝试兜底”，是互斥优先级——选中哪一级就只看那一
-# 级是否有 index.html，不落到下一级）：
-#   1. 环境变量 VD_WEB_DIST 显式指定
-#   2. 冻结态（PyInstaller onedir，getattr(sys, 'frozen', False)）：
-#      打包目录（_MEIPASS 或 exe 所在目录）下的 webdist/
-#   3. 仓库开发路径 frontend/dist
-# 缺 index.html 时返回 None，完全跳过挂载 —— 纯 API 模式与今天的现状逐字节
-# 一致（GET / 404，/api/* 不受影响）。
 def _web_dist() -> Path | None:
+    """静态前端目录解析。VD_WEB_DIST 是三态开关（不是“依次尝试兜底”，是
+    互斥优先级——选中哪一态就只看那一态，不落到下一态）：
+
+      - 未设置：自动解析——冻结态（PyInstaller onedir，
+        getattr(sys, 'frozen', False)）用打包目录（_MEIPASS 或 exe 所在
+        目录）下的 webdist/；否则用仓库开发路径 frontend/dist。
+      - 显式设为空字符串（VD_WEB_DIST=""）：禁用静态托管，直接返回
+        None，不做任何回退。测试套件默认强制这一态（见 conftest.py），
+        避免"本机是否已 pnpm build 过前端"这种环境差异渗进测试结果。
+      - 显式设为非空路径：就用那个路径，不再看冻结态/开发路径分支。
+
+    无论走到哪一态，候选目录下没有 index.html 都返回 None ——纯 API 模式，
+    与今天的现状逐字节一致（GET / 404，/api/* 不受影响）。
+    """
     env = os.environ.get("VD_WEB_DIST")
-    if env:
+    if env is not None:
+        if env == "":
+            return None
         candidate = Path(env)
     elif getattr(sys, "frozen", False):
-        candidate = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "webdist"
+        meipass = getattr(sys, "_MEIPASS", None)
+        base = Path(meipass) if meipass else Path(sys.executable).parent
+        candidate = base / "webdist"
     else:
         candidate = Path(__file__).resolve().parents[3] / "frontend" / "dist"
     return candidate if (candidate / "index.html").exists() else None

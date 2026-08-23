@@ -22,7 +22,11 @@ def main(argv: list[str] | None = None) -> None:
     if not args.no_browser:
         url = f"http://127.0.0.1:{args.port}"
         # 必须在 uvicorn.run（阻塞）之前注册好计时器，否则永远等不到执行。
-        threading.Timer(1.5, webbrowser.open, args=(url,)).start()
+        # daemon=True：不然进程退出（uvicorn.run 返回后）要等这个计时器线程
+        # 自然结束，最多让 exe 多挂 1.5s 才真正退出。
+        t = threading.Timer(1.5, webbrowser.open, args=(url,))
+        t.daemon = True
+        t.start()
 
     uvicorn.run(app, host="127.0.0.1", port=args.port)
 
