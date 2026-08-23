@@ -28,11 +28,11 @@ VideoDistiller Windows 使用说明
   AutoHotkey.exe 在 PATH 中可被找到（缺失时执行会报"未找到 AutoHotkey.exe"）。
 - 执行采集使用 ffmpeg 的 ddagrab 屏幕捕获。内置 ffmpeg 为 gyan.dev
   release-essentials 构建；若采集报错找不到 ddagrab，请换用其 full 构建
-  替换 ffmpeg\ 目录下的 ffmpeg.exe，或按 docs/windows-verification.md
-  方式 B 自行配置 PATH 中的 ffmpeg。
+  替换 ffmpeg\ 目录下的 ffmpeg.exe，或按验证清单（链接见下）方式 B
+  自行配置 PATH 中的 ffmpeg。
 
-在第一次使用执行台功能之前，请先完成一遍验证清单：
-  docs/windows-verification.md
+在第一次使用执行台功能之前，请先完成一遍验证清单（在线文档，zip 内不含）：
+  https://github.com/nomadicwind/video-distiller/blob/main/docs/windows-verification.md
 清单第一项就是验证 F12 急停：跑一个方案，中途按 F12，必须能立刻停止并
 释放所有被按住的按键。这一项验证通过之前，请不要用执行台方案操作重要
 或不可撤销的场景。
