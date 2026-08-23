@@ -180,3 +180,14 @@ M12 为监视器引入并排对比模式，支持在同一份分析里选另一�
 - **校准**：进入校准态时 B 暂时脱离跟随（主视频同时暂停，避免边跑边校），B 格下沿出现独立定位条——点击/拖动直接 seek B、`[−1帧][+1帧]` 按 B 自身 fps 步进、mono 时码实时显示。两侧各自停在同一动作瞬间后点击「以当前两帧对齐」，把当前两侧的时间差保存为新偏移并退出校准，B 恢复跟随。
 - **对比条**：位于 Transport 之下的独立一行，可开关对比、下拉选择就绪视频（含「清除对比」）、进入/退出校准、直接编辑偏移 ms（`[−1帧][+1帧]` 按 A 自身 fps 微调，与校准定位条按 B fps 步进是两件独立的事）、实时显示 B 的时码。未配置对比视频时点击 Switch 只做引导提示，不会静默失败。
 - **持久化**：对比视频与偏移保存在 Analysis 上（`PATCH /api/analyses/{id}/compare`，`video_id: null` 清除对比并连带清空偏移），刷新页面后配置仍在；选定的视频必须处于 `ready` 状态。
+
+## M13 · Windows 打包
+
+M13 把 VideoDistiller 打包为免安装的 Windows 单机版：PyInstaller onedir + 内置 ffmpeg，产物由 GitHub Actions 生成，无需在本机搭建 Python/Node 环境即可运行。
+
+- **触发打包**：workflow `windows-package`（`.github/workflows/windows-package.yml`）仅支持 `workflow_dispatch` 手动触发，不随 push 自动运行。触发方式：GitHub 仓库页 → Actions → 选择「windows-package」→ Run workflow（或 `gh workflow run windows-package.yml`）。
+- **下载产物**：运行结束后产物以 artifact `VideoDistiller-win64`（zip）形式上传，保留期 14 天；可在该次运行的页面下载，或用 `gh run download` 拉取。
+- **zip 结构**：`VideoDistiller/`（PyInstaller onedir 全部内容，内含打包好的前端 `webdist/`）、`ffmpeg/`（`ffmpeg.exe`、`ffprobe.exe`、`LICENSE`）、`run.bat`、`使用说明.txt`。
+- **运行方式**：解压后双击 `run.bat`——它把内置 `ffmpeg/` 目录前置进 `PATH`，再启动 `VideoDistiller\VideoDistiller.exe`；该 exe 就绪后会在浏览器自动打开 `http://127.0.0.1:8000`（exe 本身另支持 `--no-browser`、`--port` 两个参数）。数据目录固定在 `%USERPROFILE%\VideoDistiller`，删除该目录即可清空全部数据，不影响程序本体。
+- **可选依赖**：claude CLI 在 Windows 上是可选的——未安装时，执行循环回灌的命名功能优雅降级为「未命名」，不影响其余功能（M6 现状不变）。
+- **执行台注入红线**：Windows 上后端不设 `VD_HOST` 时会自动选择真实 `WindowsHost`（键盘/鼠标注入），但这只在用户主动于「执行台」运行方案时才会发生，不是默认后台行为。首次使用执行台前务必先走一遍 `docs/windows-verification.md`——清单第一项就是验证 F12 急停必须能立即生效。

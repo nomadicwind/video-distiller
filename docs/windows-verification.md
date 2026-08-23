@@ -2,7 +2,18 @@
 
 M4 在 macOS 上以 MockHost 完成全链路开发与测试（spec §11：Windows 真实注入只能手工验证）。以下事项需在 Windows 机器上人工验证，按序进行。
 
-## 前置
+## 启动方式
+
+### 方式 A：打包 zip 运行（推荐）
+
+1. 从 CI 产物下载 `VideoDistiller-win64.zip`（GitHub 仓库页 → Actions → windows-package → 对应 run 的 Artifacts；或 `gh run download`。详见 README「M13 · Windows 打包」）。
+2. 解压到任意目录。
+3. 双击 `run.bat`。
+4. 稍等片刻，浏览器会自动打开 `http://127.0.0.1:8000`（如未自动打开，手动在浏览器地址栏输入该地址）。
+
+ffmpeg/ffprobe 已内置在 zip 的 `ffmpeg/` 目录下，`run.bat` 会自动将其加入 PATH，无需另行安装或配置。后端不设 `VD_HOST`，win32 上自动选择真实 `WindowsHost`。
+
+### 方式 B：源码方式
 
 - 安装 [AutoHotkey v2](https://www.autohotkey.com/)，确认 `AutoHotkey.exe` 在 PATH 中可被发现（若安装仅含 `AutoHotkey64.exe`，需调整 PATH 或建别名）
 - 安装含 d3d11/ddagrab 支持的 ffmpeg 构建，加入 PATH

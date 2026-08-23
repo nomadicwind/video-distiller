@@ -34,7 +34,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install backend and PyInstaller
-        run: pip install ./backend pyinstaller
+        run: pip install ./backend pyinstaller==6.22.2
 
       - name: Run PyInstaller
         run: pyinstaller packaging/vd.spec --distpath dist-pack
