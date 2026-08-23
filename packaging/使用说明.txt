@@ -23,6 +23,14 @@ VideoDistiller Windows 使用说明
 执行台方案在运行时会向系统真实注入键盘/鼠标输入（模拟你在操作游戏或程序）。
 这不是一个默认开启的后台行为——只有当你主动在界面上启动执行台方案时才会发生。
 
+执行台有两项额外前置（仅执行台需要，标注/分析功能不依赖它们）：
+- 注入需要 AutoHotkey v2（https://www.autohotkey.com/），安装后确保
+  AutoHotkey.exe 在 PATH 中可被找到（缺失时执行会报"未找到 AutoHotkey.exe"）。
+- 执行采集使用 ffmpeg 的 ddagrab 屏幕捕获。内置 ffmpeg 为 gyan.dev
+  release-essentials 构建；若采集报错找不到 ddagrab，请换用其 full 构建
+  替换 ffmpeg\ 目录下的 ffmpeg.exe，或按 docs/windows-verification.md
+  方式 B 自行配置 PATH 中的 ffmpeg。
+
 在第一次使用执行台功能之前，请先完成一遍验证清单：
   docs/windows-verification.md
 清单第一项就是验证 F12 急停：跑一个方案，中途按 F12，必须能立刻停止并

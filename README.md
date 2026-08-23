@@ -190,4 +190,5 @@ M13 把 VideoDistiller 打包为免安装的 Windows 单机版：PyInstaller one
 - **zip 结构**：`VideoDistiller/`（PyInstaller onedir 全部内容，内含打包好的前端 `webdist/`）、`ffmpeg/`（`ffmpeg.exe`、`ffprobe.exe`、`LICENSE`）、`run.bat`、`使用说明.txt`。
 - **运行方式**：解压后双击 `run.bat`——它把内置 `ffmpeg/` 目录前置进 `PATH`，再启动 `VideoDistiller\VideoDistiller.exe`；该 exe 就绪后会在浏览器自动打开 `http://127.0.0.1:8000`（exe 本身另支持 `--no-browser`、`--port` 两个参数）。数据目录固定在 `%USERPROFILE%\VideoDistiller`，删除该目录即可清空全部数据，不影响程序本体。
 - **可选依赖**：claude CLI 在 Windows 上是可选的——未安装时，执行循环回灌的命名功能优雅降级为「未命名」，不影响其余功能（M6 现状不变）。
+- **执行台额外前置**（仅执行台需要，标注/分析不依赖）：注入需另装 [AutoHotkey v2](https://www.autohotkey.com/) 并使 `AutoHotkey.exe` 在 PATH 可见（缺失时报「未找到 AutoHotkey.exe」）；执行采集用 ffmpeg `ddagrab`——内置的 gyan.dev release-essentials 构建若报缺该滤镜，换用其 full 构建替换 `ffmpeg/ffmpeg.exe` 即可。
 - **执行台注入红线**：Windows 上后端不设 `VD_HOST` 时会自动选择真实 `WindowsHost`（键盘/鼠标注入），但这只在用户主动于「执行台」运行方案时才会发生，不是默认后台行为。首次使用执行台前务必先走一遍 `docs/windows-verification.md`——清单第一项就是验证 F12 急停必须能立即生效。
