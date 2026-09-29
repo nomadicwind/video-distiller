@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowLeft, Film, Link as LinkIcon, Upload } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Film, Link as LinkIcon, Upload } from 'lucide-react'
 import { clearCompare, saveCompare } from './actions'
 import { api } from './api/client'
 import type { Video, Aggregate, Keymap } from './api/types'
@@ -236,15 +236,30 @@ function WorkbenchTopContext({ onBack }: { onBack: () => void }): JSX.Element | 
 
 /**
  * localStorage 里存的时间轴面板高度（key `vd.tl-h`）。缺失/非数字一律读作
- * null（回退到 auto 内容自适应高度），不在这里 clamp——clamp 发生在渲染时
- * （见 Workbench 的 gridTemplateRows），这样 viewportH 变化后仍按当前视口
- * 重新收敛，而不是把某次挂载时的 clamp 结果焊死存起来。
+ * null——渲染时 null 回退到「视频优先」的 200px 默认（task-5：原先回退到
+ * auto 内容自适应高度，用户裁定视频被挤压看不清后改为固定默认），不在这里
+ * clamp——clamp 发生在渲染时（见 Workbench 的 gridTemplateRows），这样
+ * viewportH 变化后仍按当前视口重新收敛，而不是把某次挂载时的 clamp 结果焊
+ * 死存起来。
  */
 function readStoredTlH(): number | null {
   const raw = localStorage.getItem('vd.tl-h')
   if (raw == null) return null
   const n = Number(raw)
   return Number.isFinite(n) ? n : null
+}
+
+/** 无内容行时间轴的「视频优先」默认高度（task-5）：分割条双击复位、以及
+ * 从未拖动过分割条时都落回这个值，而不是旧的 auto 内容自适应高度。 */
+const DEFAULT_TL_HEIGHT = 200
+
+/**
+ * Inspector/缩略图带的收合状态持久化（task-5）。缺失/非法值一律读作 true
+ * （默认展开）——只有精确等于字符串 'false' 才读作收起，任何损坏/意外写入
+ * 的值都安全回退到展开态，不会把用户锁在一个空面板里。
+ */
+function readStoredOpen(key: string): boolean {
+  return localStorage.getItem(key) !== 'false'
 }
 
 function Workbench({ video }: { video: Video }) {
@@ -267,6 +282,22 @@ function Workbench({ video }: { video: Video }) {
   const gridRef = useRef<HTMLDivElement>(null)
   const [tlH, setTlH] = useState<number | null>(() => readStoredTlH())
   const dragHRef = useRef<number | null>(null)
+
+  // task-5：右栏（Inspector）/缩略图带各自的收合状态，持久化到各自的
+  // localStorage key。两者都是纯 UI 显示状态（不影响标注数据），toggle
+  // 时读-改-写一步到位，不需要像 tlH 那样区分拖动中/落盘两个阶段。
+  const [inspectorOpen, setInspectorOpen] = useState(() => readStoredOpen('vd.inspector-open'))
+  const [stripOpen, setStripOpen] = useState(() => readStoredOpen('vd.strip-open'))
+  const toggleInspectorOpen = () => setInspectorOpen(o => {
+    const next = !o
+    localStorage.setItem('vd.inspector-open', String(next))
+    return next
+  })
+  const toggleStripOpen = () => setStripOpen(o => {
+    const next = !o
+    localStorage.setItem('vd.strip-open', String(next))
+    return next
+  })
 
   // 复查修复：clampTlHeight 的 max 依赖 window.innerHeight，只在渲染时求值
   // ——单纯的窗口 resize 不会让 Workbench 重渲染，于是缩窗口后 tlH 存的旧
@@ -370,7 +401,8 @@ function Workbench({ video }: { video: Video }) {
   return (
     <div className="workbench">
       <div className="workbench-grid" ref={gridRef} style={{
-        gridTemplateRows: `minmax(0, 1fr) auto auto auto 6px ${tlH != null ? `${clampTlHeight(tlH, window.innerHeight)}px` : 'auto'}`,
+        gridTemplateColumns: inspectorOpen ? '1fr 320px' : '1fr 0',
+        gridTemplateRows: `minmax(0, 1fr) auto auto auto 6px ${clampTlHeight(tlH ?? DEFAULT_TL_HEIGHT, window.innerHeight)}px`,
       }}>
         <div className="workbench-pane workbench-monitor">
           <Player video={video} />
@@ -381,12 +413,46 @@ function Workbench({ video }: { video: Video }) {
         <div className="workbench-pane workbench-compare">
           <CompareBar video={video} />
         </div>
-        <div className="workbench-pane workbench-strip">
-          <ThumbStrip video={video} />
+        <div className={stripOpen ? 'workbench-pane workbench-strip' : 'workbench-pane workbench-strip workbench-strip-collapsed'}>
+          {stripOpen ? (
+            <>
+              <div className="workbench-strip-toggle">
+                <Tooltip tip="收起缩略图带">
+                  <button type="button" aria-label="收起缩略图带" onClick={toggleStripOpen}>
+                    <ChevronDown />
+                  </button>
+                </Tooltip>
+              </div>
+              <div className="workbench-strip-body"><ThumbStrip video={video} /></div>
+            </>
+          ) : (
+            <Tooltip tip="展开缩略图带">
+              <button type="button" className="workbench-strip-handle" aria-label="展开缩略图带" onClick={toggleStripOpen}>
+                <ChevronUp />
+              </button>
+            </Tooltip>
+          )}
         </div>
         <div className="workbench-pane workbench-inspector">
-          <Inspector />
+          {inspectorOpen && <Inspector />}
         </div>
+        {inspectorOpen ? (
+          <div className="workbench-collapse-inspector">
+            <Tooltip tip="收起标注栏">
+              <button type="button" aria-label="收起标注栏" onClick={toggleInspectorOpen}>
+                <ChevronRight />
+              </button>
+            </Tooltip>
+          </div>
+        ) : (
+          <div className="workbench-expand-inspector">
+            <Tooltip tip="展开标注栏">
+              <button type="button" aria-label="展开标注栏" onClick={toggleInspectorOpen}>
+                <ChevronLeft />
+              </button>
+            </Tooltip>
+          </div>
+        )}
         <div className="workbench-splitter"
           onPointerDown={onSplitterPointerDown}
           onPointerMove={onSplitterPointerMove}

@@ -335,23 +335,28 @@ canvas { display: block; }
 }
 
 /*
- * grid-template-rows here is the static fallback for the 6-row frame (M11
- * 分割条 added a 6px splitter row; M12 任务 3 inserts the 对比条 row between
- * transport and strip) — the real, resizable row template is set inline on
- * this div from Workbench state (App.tsx: `tlH`), which overrides this rule
- * whenever it applies. This declaration only matters before that state
- * settles or if JS fails, so it mirrors the inline default (`auto` for the
- * timeline row).
+ * grid-template-rows/-columns here are the static fallback for the 6-row,
+ * 2-column frame (M11 分割条 added a 6px splitter row; M12 任务 3 inserts
+ * the 对比条 row between transport and strip; task-5 makes the inspector
+ * column collapsible) — the real templates are set inline on this div from
+ * Workbench state (App.tsx: `tlH`/`inspectorOpen`), which overrides this
+ * rule whenever it applies. This declaration only matters before that state
+ * settles or if JS fails, so it mirrors the inline defaults (200px 视频优先
+ * default for the timeline row — task-5 用户裁定视频被挤压看不清后从 auto
+ * 改为固定默认；inspector 常态展开的 320px 列宽)。position: relative 让
+ * .workbench-collapse-inspector/.workbench-expand-inspector（下方）能相对
+ * 这个容器绝对定位，而不是相对 <body>。
  */
 .workbench-grid {
   display: grid;
   grid-template-columns: 1fr 320px;
-  grid-template-rows: minmax(0, 1fr) auto auto auto 6px auto;
+  grid-template-rows: minmax(0, 1fr) auto auto auto 6px 200px;
   gap: 1px;
   background: var(--bg-app);
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .workbench-pane { background: var(--bg-panel); }
@@ -392,8 +397,40 @@ canvas { display: block; }
  */
 .workbench-strip {
   grid-column: 1; grid-row: 4; padding: 0 12px 12px; min-width: 0; min-height: 0;
-  display: flex; align-items: flex-end;
+  display: flex; align-items: flex-end; gap: 6px;
 }
+/*
+ * 缩略图带可收合（task-5）：展开态在带左缘加一枚小 chevron（不改动
+ * ThumbStrip.tsx 本身——收合是 Workbench 这一层的条件渲染，画布常量/指针
+ * 逻辑一概不碰）。收合态整行只剩一条 8px 把手（padding 收窄到 0，行高完全
+ * 由 auto 轨道跟着内容走），点它展开——比照 .workbench-splitter 的极窄可点
+ * 行惯例，chevron 用 overflow: visible 让 14px 图标略微探出 8px 高的把手，
+ * 视觉上读作"抓手"而不是被裁掉一半。
+ */
+.workbench-strip.workbench-strip-collapsed { padding: 0 12px 4px; align-items: center; }
+.workbench-strip-toggle { flex-shrink: 0; }
+.workbench-strip-toggle button {
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: var(--radius-s);
+  color: var(--text-3); cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.workbench-strip-toggle button:hover { background: var(--bg-control-hover); color: var(--text-1); }
+.workbench-strip-toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.workbench-strip-toggle svg { width: 14px; height: 14px; }
+.workbench-strip-body { flex: 1 1 0; min-width: 0; }
+.workbench-strip-handle {
+  width: 100%; height: 8px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: visible;
+  background: var(--bg-control); border: none; border-radius: var(--radius-s);
+  color: var(--text-2); cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.workbench-strip-handle:hover { background: var(--bg-control-hover); color: var(--text-1); }
+.workbench-strip-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.workbench-strip-handle svg { width: 14px; height: 14px; position: absolute; }
 /*
  * overflow-y: auto stays here as a fallback (InferPanel's own content isn't
  * its own scroll container, so a very long proposal list still needs
@@ -417,6 +454,48 @@ canvas { display: block; }
   flex-direction: column;
   gap: 12px;
 }
+/*
+ * Inspector 可收合（task-5，用户裁定视频优先）：列宽收合到 0（Workbench 内
+ * 联 gridTemplateColumns: '1fr 320px' → '1fr 0'），对比模式下双画面各多得
+ * ~160px 宽。收合态不渲染 <Inspector/>（宽度已是 0，渲染内容也看不见，索
+ * 性不挂载，避免它内部的 effect/请求白跑）。
+ *
+ * 两枚把手都用绝对定位挂在 .workbench-grid 上（而不是 Inspector 内部）：
+ * 展开态的收起把手要能被点到就必须活在还没塌缩的那次渲染里，但更重要的是
+ * .workbench-inspector 自己是 overflow-y: auto 的滚动容器——把手若是它的子
+ * 元素，标注面板一滚动把手就跟着滚出视口；挂在 grid 容器上则不受内部滚动
+ * 影响。right 值按 320px 列宽换算，44px 触达尺寸覆盖列缘一半各 22px，视觉
+ * 上正好卡在两列分界线。
+ */
+.workbench-collapse-inspector { position: absolute; top: 12px; right: 298px; z-index: 10; }
+.workbench-collapse-inspector button {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-m);
+  color: var(--text-2); cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.workbench-collapse-inspector button:hover { background: var(--bg-control-hover); color: var(--text-1); }
+.workbench-collapse-inspector button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.workbench-collapse-inspector svg { width: 18px; height: 18px; }
+/*
+ * 收合态的展开把手：36px 小药丸浮在视口（grid 容器）右上角。此时 Inspector
+ * 列宽已是 0，监视器行独占全宽——把手会叠在监视器画面的右上角像素上，但
+ * .monitor 本身在那个角落没有任何常驻控件/信息（见 player/Player.tsx，全
+ * 屏按钮在 Transport 里，不在监视器角部），36px 的浮层不遮挡任何监视器
+ * 内容。
+ */
+.workbench-expand-inspector { position: absolute; top: 12px; right: 12px; z-index: 10; }
+.workbench-expand-inspector button {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-m);
+  color: var(--text-2); cursor: pointer; box-shadow: var(--shadow-1);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.workbench-expand-inspector button:hover { background: var(--bg-control-hover); color: var(--text-1); }
+.workbench-expand-inspector button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.workbench-expand-inspector svg { width: 18px; height: 18px; }
 /*
  * .workbench-splitter (M11 分割条): sits between the strip row and the
  * timeline row, spans both columns. Transparent by default; a 1px center
