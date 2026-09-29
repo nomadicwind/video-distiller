@@ -57,3 +57,11 @@ test('patternToBlocks: a tap item missing key falls back to unsupported', () => 
 test('patternToBlocks: a gap item missing ms falls back to unsupported', () => {
   expect(patternToBlocks([{ op: 'gap' }])).toEqual({ supported: false })
 })
+
+test('patternToBlocks: a hold item with neither key nor button falls back to unsupported', () => {
+  expect(patternToBlocks([{ op: 'hold', ms: 300 }])).toEqual({ supported: false })
+})
+
+test('patternToBlocks: a tap item with tol_ms falls back to unsupported', () => {
+  expect(patternToBlocks([{ op: 'tap', key: 'Q', tol_ms: 50 }])).toEqual({ supported: false })
+})

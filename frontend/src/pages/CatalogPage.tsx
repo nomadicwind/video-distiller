@@ -23,6 +23,11 @@ export function CatalogPage({ onBack }: { onBack: () => void }) {
   const [form, setForm] = useState({ ...EMPTY })
   const [editing, setEditing] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Skill | null>(null)
+  // 新建→创建成功后 editing 前后都是 null，PatternBuilder 的 key（见下方）
+  // 恒为 '_new'，构建器不会重挂载去清空内部块列表——第二次创建会静默存入
+  // form.pattern 已重置的空 pattern，而构建器仍显示上一个技能的块（复查发现
+  // 1）。修复：创建成功后自增这个 nonce，拼进 key 里强制重挂载。
+  const [newPatternNonce, setNewPatternNonce] = useState(0)
 
   const refresh = () => { void api.listSkills().then(setSkills) }
   useEffect(refresh, [])
@@ -35,9 +40,12 @@ export function CatalogPage({ onBack }: { onBack: () => void }) {
     const num = (v: string) => (v === '' ? undefined : Number(v))
     const payload = { name: form.name, class_: form.class_ || undefined,
       cd_ms: num(form.cd_ms), cast_ms: num(form.cast_ms), anim_ms: num(form.anim_ms), pattern: form.pattern }
+    const wasCreating = !editing
     if (editing) await api.patchSkill(editing, payload)
     else await api.createSkill(payload)
-    setForm({ ...EMPTY }); setEditing(null); refresh()
+    setForm({ ...EMPTY }); setEditing(null)
+    if (wasCreating) setNewPatternNonce(n => n + 1)
+    refresh()
   }
 
   const edit = (s: Skill) => {
@@ -110,7 +118,7 @@ export function CatalogPage({ onBack }: { onBack: () => void }) {
                   目标时强制重新挂载，构建器内部块列表/JSON 草稿状态整体重置，
                   而不是被一个持续盯着 form.pattern 的 effect 半途接管——见
                   PatternBuilder 顶部注释。 */}
-              <PatternBuilder key={editing ?? '_new'} value={form.pattern}
+              <PatternBuilder key={editing ?? `_new${newPatternNonce}`} value={form.pattern}
                 onChange={pattern => setForm(f => ({ ...f, pattern }))} />
             </Field>
           </div>

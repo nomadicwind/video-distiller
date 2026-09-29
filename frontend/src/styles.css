@@ -24,7 +24,8 @@ input, select, textarea {
   font: inherit; color: var(--text-1); background: var(--bg-inset);
   border: 1px solid var(--border); border-radius: var(--radius-s); padding: 4px 8px;
 }
-input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible,
+.pattern-json summary:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
 canvas { display: block; }

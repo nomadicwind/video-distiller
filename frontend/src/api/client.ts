@@ -43,7 +43,17 @@ export const api = {
       }
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(JSON.parse(xhr.responseText) as Video)
+          try {
+            resolve(JSON.parse(xhr.responseText) as Video)
+          } catch {
+            // 2xx 但 body 非 JSON（如代理返回 200 HTML）：镜像 j() 的错误语义
+            // reject，而不是让 JSON.parse 抛出未捕获异常、Promise 永不
+            // settle——调用方 doUpload 的 finally 复位 uploadPct 也就永远不跑，
+            // 上传 UI 卡死。
+            const text = xhr.responseText
+            useErrors.getState().pushError(`API ${xhr.status}: ${text.slice(0, 200)}`)
+            reject(new Error(`API ${xhr.status}: ${text}`))
+          }
           return
         }
         const text = xhr.responseText

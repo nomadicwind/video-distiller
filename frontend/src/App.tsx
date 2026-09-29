@@ -403,6 +403,10 @@ function Workbench({ video }: { video: Video }) {
       <div className="workbench-grid" ref={gridRef} style={{
         gridTemplateColumns: inspectorOpen ? '1fr 320px' : '1fr 0',
         gridTemplateRows: `minmax(0, 1fr) auto auto auto 6px ${clampTlHeight(tlH ?? DEFAULT_TL_HEIGHT, window.innerHeight)}px`,
+        // 收合 Inspector 时右列宽度塌成 0，但 grid gap 仍占 1px，落在这条 0 宽
+        // 列上变成一条常驻的 --bg-app 竖缝（复查发现，紧贴视频优先画面右缘）
+        // ——收合态把列间距也归零即可，两列间本就没有内容需要缝隙分隔。
+        ...(inspectorOpen ? {} : { columnGap: 0 }),
       }}>
         <div className="workbench-pane workbench-monitor">
           <Player video={video} />
@@ -418,7 +422,7 @@ function Workbench({ video }: { video: Video }) {
             <>
               <div className="workbench-strip-toggle">
                 <Tooltip tip="收起缩略图带">
-                  <button type="button" aria-label="收起缩略图带" onClick={toggleStripOpen}>
+                  <button type="button" aria-label="收起缩略图带" aria-expanded={stripOpen} onClick={toggleStripOpen}>
                     <ChevronDown />
                   </button>
                 </Tooltip>
@@ -427,7 +431,7 @@ function Workbench({ video }: { video: Video }) {
             </>
           ) : (
             <Tooltip tip="展开缩略图带">
-              <button type="button" className="workbench-strip-handle" aria-label="展开缩略图带" onClick={toggleStripOpen}>
+              <button type="button" className="workbench-strip-handle" aria-label="展开缩略图带" aria-expanded={stripOpen} onClick={toggleStripOpen}>
                 <ChevronUp />
               </button>
             </Tooltip>
@@ -438,16 +442,16 @@ function Workbench({ video }: { video: Video }) {
         </div>
         {inspectorOpen ? (
           <div className="workbench-collapse-inspector">
-            <Tooltip tip="收起标注栏">
-              <button type="button" aria-label="收起标注栏" onClick={toggleInspectorOpen}>
+            <Tooltip tip="收起侧栏">
+              <button type="button" aria-label="收起侧栏" aria-expanded={inspectorOpen} onClick={toggleInspectorOpen}>
                 <ChevronRight />
               </button>
             </Tooltip>
           </div>
         ) : (
           <div className="workbench-expand-inspector">
-            <Tooltip tip="展开标注栏">
-              <button type="button" aria-label="展开标注栏" onClick={toggleInspectorOpen}>
+            <Tooltip tip="展开侧栏">
+              <button type="button" aria-label="展开侧栏" aria-expanded={inspectorOpen} onClick={toggleInspectorOpen}>
                 <ChevronLeft />
               </button>
             </Tooltip>

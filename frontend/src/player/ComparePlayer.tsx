@@ -141,6 +141,9 @@ export function ComparePlayer({ videoId, durationMs, fps }: {
     if (calibrating) return
     const b = ref.current
     if (!b) return
+    // 加载失败是持续态：媒体元素已损坏，play() 必然 reject——每帧继续尝试
+    // 只会刷屏未处理 rejection，直接短路（顺带 pause，同 !inRange 分支）。
+    if (loadError) { b.pause(); return }
     if (!target.inRange) { b.pause(); return }
     const a = videoEl()
     const playing = a ? !a.paused : false
@@ -152,7 +155,7 @@ export function ComparePlayer({ videoId, durationMs, fps }: {
     if (decideResync(target.tBMs, b.currentTime * 1000, true) === 'resync') {
       b.currentTime = target.tBMs / 1000
     }
-  }, [playheadMs, offsetMs, durationMs, calibrating, target.inRange, target.tBMs])
+  }, [playheadMs, offsetMs, durationMs, calibrating, target.inRange, target.tBMs, loadError])
 
   // 播放/暂停/倍速跟随 A：同样在校准态或出界时短路（不播放）。applyPlayState
   // 在挂载时也跑一遍——覆盖"打开对比时 A 已经在播放"这个初始状态（此时不会
@@ -163,7 +166,8 @@ export function ComparePlayer({ videoId, durationMs, fps }: {
     if (!a || !b) return
     const syncRate = () => { b.playbackRate = a.playbackRate }
     const applyPlayState = () => {
-      if (calibrating || !target.inRange) { b.pause(); return }
+      // 同上：B 已损坏时 A 的 play 事件不该再触发 void b.play() 的 reject 刷屏。
+      if (calibrating || !target.inRange || loadError) { b.pause(); return }
       if (a.paused) b.pause()
       else if (b.paused) void b.play()
     }
@@ -177,7 +181,7 @@ export function ComparePlayer({ videoId, durationMs, fps }: {
       a.removeEventListener('pause', applyPlayState)
       a.removeEventListener('ratechange', syncRate)
     }
-  }, [calibrating, target.inRange])
+  }, [calibrating, target.inRange, loadError])
 
   return (
     <>

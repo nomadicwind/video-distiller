@@ -6,9 +6,11 @@ import { Button } from './Button'
  * 任何调用点）。无 portal：fixed 定位 div 足够，这个应用没有嵌套 overflow
  * 裁切上下文需要跳出。
  *
- * Esc 关闭：自己的 keydown 监听器在冒泡阶段 stopPropagation，防止事件继续
- * 冒泡到 window 上的全局热键监听器（hotkeys.ts/HotkeyOverlay.tsx 都挂在
- * window，冒泡阶段——弹层在 DOM 树里更靠内层，先于 window 收到事件）。
+ * Esc 关闭：自己的 keydown 监听器挂在 capture 阶段并 stopImmediatePropagation
+ * ——hotkeys.ts/HotkeyOverlay.tsx 的监听器同样挂在 window（冒泡阶段），普通
+ * stopPropagation 对同一 target 上的其它监听器是空操作、挡不住它们；只有
+ * capture 阶段（保证先跑）+ stopImmediatePropagation（保证挡住后续监听器）
+ * 才能真正阻止事件传到那些全局热键监听器。
  *
  * 焦点：挂载时聚焦一次到"取消"（effect 依赖数组为空，父组件重渲染/传入新
  * 的内联 onCancel 不会重新跑这个 effect、抢走用户已经移动到别处的焦点）；
@@ -31,7 +33,7 @@ export function ConfirmDialog({ title, body, confirmLabel, onConfirm, onCancel }
   useEffect(() => {
     cancelRef.current?.focus()
     const onKey = (e: KeyboardEvent) => {
-      e.stopPropagation()
+      e.stopImmediatePropagation()
       if (e.key === 'Escape') {
         onCancelRef.current()
         return
@@ -48,8 +50,8 @@ export function ConfirmDialog({ title, body, confirmLabel, onConfirm, onCancel }
         first.focus()
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
   return (
