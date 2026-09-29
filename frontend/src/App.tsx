@@ -518,6 +518,11 @@ function VideoCover({ video }: { video: Video }): JSX.Element {
 function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
   const [videos, setVideos] = useState<Video[]>([])
   const [url, setUrl] = useState('')
+  const [pulling, setPulling] = useState(false)
+  // undefined = 未在上传；null = 上传中但长度不可知（不定态）；number = 百分比
+  const [uploadPct, setUploadPct] = useState<number | null | undefined>(undefined)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploading = uploadPct !== undefined
   const refresh = () => { void api.listVideos().then(setVideos) }
 
   useEffect(() => {
@@ -526,38 +531,68 @@ function VideoLibrary({ onOpen }: { onOpen: (v: Video) => void }) {
     return () => clearInterval(timer)
   }, [])
 
+  const doUpload = async (f: File) => {
+    setUploadPct(null)
+    try {
+      await api.uploadWithProgress(f, setUploadPct)
+      refresh()
+    } finally {
+      setUploadPct(undefined)
+    }
+  }
+
   return (
     <div className="library">
       <Card title="导入视频">
         <div className="import-row">
-          <label className="dropzone"
+          <label className={uploading ? 'dropzone dropzone-disabled' : 'dropzone'}
             onDragOver={e => e.preventDefault()}
             onDrop={async e => {
               e.preventDefault()
+              if (uploading) return
               const f = e.dataTransfer.files?.[0]
-              if (f) { await api.upload(f); refresh() }
+              if (f) await doUpload(f)
             }}>
             <Upload />
             <span>拖入视频文件，或点击选择</span>
-            <input type="file" accept="video/*" hidden onChange={async e => {
-              const f = e.target.files?.[0]
-              if (f) { await api.upload(f); refresh(); e.target.value = '' }
-            }} />
+            <input ref={fileInputRef} type="file" accept="video/*" hidden disabled={uploading}
+              onChange={async e => {
+                const f = e.target.files?.[0]
+                if (f) await doUpload(f)
+                e.target.value = ''
+              }} />
           </label>
           <Field label="B 站视频 URL（抖音请手动下载后上传）">
             <div className="import-url-row">
               <input value={url} onChange={e => setUrl(e.target.value)}
-                placeholder="https://www.bilibili.com/video/..." />
-              <Button variant="primary" icon={<LinkIcon />} disabled={!url} onClick={async () => {
-                await api.pull(url); setUrl(''); refresh()
+                placeholder="https://www.bilibili.com/video/..." disabled={pulling} />
+              <Button variant="primary" icon={<LinkIcon />} disabled={!url} loading={pulling} onClick={async () => {
+                setPulling(true)
+                try {
+                  await api.pull(url); setUrl(''); refresh()
+                } finally {
+                  setPulling(false)
+                }
               }}>拉取</Button>
             </div>
           </Field>
         </div>
+        {uploading && (
+          <div className="upload-progress-row">
+            <div className={uploadPct === null ? 'progress-bar progress-bar-indeterminate' : 'progress-bar'}>
+              <div className="progress-bar-fill" style={uploadPct == null ? undefined : { width: `${uploadPct}%` }} />
+            </div>
+            <span className="upload-progress-label mono">
+              {uploadPct == null ? '上传中…' : `${Math.round(uploadPct)}%`}
+            </span>
+          </div>
+        )}
       </Card>
 
       {videos.length === 0 ? (
-        <EmptyState icon={<Film />} text="还没有视频，拖入文件或粘贴 B 站链接开始分析" />
+        <EmptyState icon={<Film />} text="还没有视频，拖入文件或粘贴 B 站链接开始分析"
+          action={<Button variant="primary" size="sm" icon={<Upload />}
+            onClick={() => fileInputRef.current?.click()}>选择文件上传</Button>} />
       ) : (
         <div className="video-grid">
           {videos.map(v => {

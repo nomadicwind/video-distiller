@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pause, Play, Square, StepForward } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Pause, Play, Square, StepForward } from 'lucide-react';
 import { api } from '../api/client';
 import type { ExecState, ExecStatus, Playbook, Rotation, Video } from '../api/types';
 import { Badge } from '../ui/Badge';
@@ -7,6 +8,9 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Field } from '../ui/Field';
 
+// 状态徽章色语义（M14 任务 4，spec §7）：空闲灰/运行金/暂停黄/错误红——
+// 颜色不是唯一区分手段（global-constraints「功能色必配图标/文字」），下面
+// STATE_ICON 给每个状态配一枚区分度高的图标，一起渲染进 Badge。
 const STATE_BADGE: Record<ExecState, 'neutral' | 'accent' | 'warn' | 'danger' | 'success'> = {
   idle: 'neutral',
   running: 'accent',
@@ -21,6 +25,14 @@ const STATE_LABEL: Record<ExecState, string> = {
   paused: '已暂停',
   stopped: '已停止',
   done: '已完成',
+};
+
+const STATE_ICON: Record<ExecState, LucideIcon> = {
+  idle: Circle,
+  running: Play,
+  paused: Pause,
+  stopped: Square,
+  done: CheckCircle2,
 };
 
 export function ExecPage({ onBack }: { onBack: () => void }) {
@@ -77,14 +89,24 @@ export function ExecPage({ onBack }: { onBack: () => void }) {
   const finished = st.state === 'stopped' || st.state === 'done';
   const pct = st.total ? Math.min(100, Math.max(0, ((st.cursor ?? 0) / st.total) * 100)) : 0;
   const hasWarnings = (st.warnings && st.warnings.length > 0) || (st.manual_loops && st.manual_loops.length > 0);
+  // "stopped" 复用了两种含义：用户主动停止，或 dispatch 抛错中止（后端
+  // executor.py 两条路径都写 state="stopped"，只有 error 字段区分）——徽章
+  // 要如实读成"错误"而不是笼统的"已停止"（M14 任务 4：错误红）。
+  const isError = !!st.error;
+  const StateIcon = STATE_ICON[st.state];
 
   return (
     <div className="page">
       <div className="page-head">
         <h1>执行台</h1>
-        <p className="page-sub">
-          仅执行不判断成败；F12 全局急停（Windows）。macOS 上仅 Mock/演练。
-        </p>
+        <p className="page-sub">仅执行不判断成败——一切依赖是否触发真实按键完全交由用户核实。</p>
+      </div>
+
+      {/* F12 全局急停提示（M14 任务 4：warn 底色卡，固定可见，不随任何状态
+          消失——这是操作安全红线，不能因为一次滚动或状态切换就看不见）。 */}
+      <div className="exec-f12-warning">
+        <AlertTriangle size={14} />
+        <span>F12 全局急停（仅 Windows 实际注入按键）。macOS 上仅 Mock/演练，不会发送真实按键。</span>
       </div>
 
       <Card title="执行目标">
@@ -135,7 +157,10 @@ export function ExecPage({ onBack }: { onBack: () => void }) {
 
       <Card title="状态">
         <div className="exec-status-row">
-          <Badge kind={STATE_BADGE[st.state]}>{STATE_LABEL[st.state]}</Badge>
+          <Badge kind={isError ? 'danger' : STATE_BADGE[st.state]}>
+            {isError ? <AlertCircle size={12} /> : <StateIcon size={12} />}
+            {isError ? '错误' : STATE_LABEL[st.state]}
+          </Badge>
           {st.total != null && <span className="mono exec-status-count">{st.cursor}/{st.total}</span>}
         </div>
         {st.total != null && (

@@ -130,6 +130,64 @@ test('patchCompare clears with a null video_id', async () => {
   expect(JSON.parse(init.body)).toEqual({ video_id: null, offset_ms: 0 })
 })
 
+/** vitest 环境是 node（vite.config.ts: test.environment: 'node'），没有全局
+ * XMLHttpRequest——client.ts 的 uploadWithProgress 用它做上传进度回调，这里
+ * 手搓一个只实现用到的那部分接口（open/send/upload.onprogress/onload/
+ * onerror/status/responseText）的假 XHR 来单测回调时序与 resolve/reject 语
+ * 义，不依赖 jsdom（没有新增依赖）。 */
+class FakeXhr {
+  static instances: FakeXhr[] = []
+  upload = { onprogress: null as null | ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) }
+  onload: (() => void) | null = null
+  onerror: (() => void) | null = null
+  status = 0
+  responseText = ''
+  method = ''
+  url = ''
+  sent = false
+  constructor() { FakeXhr.instances.push(this) }
+  open(method: string, url: string) { this.method = method; this.url = url }
+  send() { this.sent = true }
+}
+
+test('uploadWithProgress reports percentage and resolves the parsed video', async () => {
+  FakeXhr.instances = []
+  vi.stubGlobal('XMLHttpRequest', FakeXhr)
+  const progress: (number | null)[] = []
+  const promise = api.uploadWithProgress(new File(['x'], 'a.mp4'), pct => progress.push(pct))
+  const xhr = FakeXhr.instances[0]
+  expect(xhr.method).toBe('POST')
+  expect(xhr.url).toBe('/api/videos/upload')
+  xhr.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 })
+  xhr.upload.onprogress?.({ lengthComputable: false, loaded: 0, total: 0 })
+  xhr.status = 200
+  xhr.responseText = JSON.stringify({ id: 'v_1', seq: 1 })
+  xhr.onload?.()
+  const video = await promise
+  expect(video.id).toBe('v_1')
+  expect(progress).toEqual([50, null])
+})
+
+test('uploadWithProgress rejects and pushes an error on non-2xx status', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeXhr)
+  FakeXhr.instances = []
+  const promise = api.uploadWithProgress(new File(['x'], 'a.mp4'), () => {})
+  const xhr = FakeXhr.instances[0]
+  xhr.status = 400
+  xhr.responseText = 'bad file'
+  xhr.onload?.()
+  await expect(promise).rejects.toThrow('API 400')
+})
+
+test('uploadWithProgress rejects on network error', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeXhr)
+  FakeXhr.instances = []
+  const promise = api.uploadWithProgress(new File(['x'], 'a.mp4'), () => {})
+  const xhr = FakeXhr.instances[0]
+  xhr.onerror?.()
+  await expect(promise).rejects.toThrow()
+})
+
 test('patchRotation sends PATCH with name to rotation endpoint', async () => {
   const fetchMock = vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ id: 'rot_1', name: '新名字', note: null }), { status: 200 }))

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { forwardRef } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 
 /* forwardRef (additive, no existing call site passes a ref today): needed so
@@ -12,34 +13,41 @@ export const Button = forwardRef<HTMLButtonElement, {
   tip?: string
   disabled?: boolean
   active?: boolean
+  /** M14 任务 4 小扩展：长耗时操作（上传、拉取远端视频……）进行中时传
+   * true——图标替换为旋转的 Loader2（.btn-spinner，遵 prefers-reduced-motion
+   * 全站归零规则）、按钮自动禁用，调用方不用额外传 disabled。 */
+  loading?: boolean
   onClick?: () => void
   children?: ReactNode
 }>(function Button(props, ref) {
-  const { variant = 'ghost', size = 'md', icon, tip, disabled, active, onClick, children } = props
+  const { variant = 'ghost', size = 'md', icon, tip, disabled, active, loading, onClick, children } = props
+  const isDisabled = disabled || loading
+  const shownIcon = loading ? <Loader2 className="btn-spinner" /> : icon
   const classes = [
     'btn',
     `btn-${variant}`,
     `btn-${size}`,
     active ? 'is-active' : '',
-    icon && !children ? 'btn-icon-only' : '',
+    shownIcon && !children ? 'btn-icon-only' : '',
   ].filter(Boolean).join(' ')
 
   // Icon-only button: the tooltip text is the only human-readable label,
   // so it must also reach assistive tech via aria-label (a bare icon glyph
   // has no accessible name otherwise).
-  const ariaLabel = tip && icon && !children ? tip : undefined
+  const ariaLabel = tip && shownIcon && !children ? tip : undefined
 
   const button = (
     <button
       ref={ref}
       type="button"
       className={classes}
-      disabled={disabled}
+      disabled={isDisabled}
       aria-pressed={active}
+      aria-busy={loading || undefined}
       aria-label={ariaLabel}
       onClick={onClick}
     >
-      {icon ? <span className="btn-icon-glyph">{icon}</span> : null}
+      {shownIcon ? <span className="btn-icon-glyph">{shownIcon}</span> : null}
       {children ? <span className="btn-label">{children}</span> : null}
     </button>
   )

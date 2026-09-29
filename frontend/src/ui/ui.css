@@ -31,6 +31,11 @@
 .btn-icon-glyph svg { width: 16px; height: 16px; display: block; }
 .btn-sm .btn-icon-glyph svg { width: 14px; height: 14px; }
 
+/* loading 态（M14 任务 4 kit 扩展）：Loader2 旋转，全局 prefers-reduced-motion
+   规则（styles.css）已经把 animation-duration 归零，这里不用重复判断一遍。 */
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+.btn-spinner { animation: btn-spin 0.8s linear infinite; }
+
 /* variant: primary — filled accent (四态：常态/hover/pressed/disabled，
    disabled 见上面通用 .btn:disabled 规则)。color 用 --on-accent，不用
    --text-1——暖白对金底只有 1.88:1，不达标（见 tokens.css --on-accent 注
@@ -258,6 +263,7 @@
 .badge {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   height: 18px;
   padding: 0 8px;
   border-radius: 999px;
@@ -266,6 +272,7 @@
   line-height: 1;
   white-space: nowrap;
 }
+.badge svg { flex-shrink: 0; }
 .badge-accent { color: var(--accent); background: var(--accent-soft); }
 .badge-success { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
 .badge-warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
@@ -274,13 +281,14 @@
 /* 轨道色系徽章（spec §7 方案编辑器：技能块徽章走 L1 轨道色，与时间轴/EntryPanel 的技能轨同色相） */
 .badge-lane-l1 { color: var(--lane-l1); background: color-mix(in srgb, var(--lane-l1) 14%, transparent); }
 
-/* ---------- Export chip (spec §7: 循环/方案 行内导出链接) ---------- */
+/* ---------- Export chip (spec §7: 循环/方案 行内导出图标按钮组) ---------- */
 .export-chips { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .export-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 18px;
+  gap: 4px;
+  height: 20px;
   padding: 0 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -291,6 +299,7 @@
   white-space: nowrap;
   transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease;
 }
+.export-chip svg { flex-shrink: 0; }
 .export-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .export-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 

@@ -25,6 +25,38 @@ export const api = {
     fd.append('file', file)
     return fetch('/api/videos/upload', { method: 'POST', body: fd }).then(r => j<Video>(r))
   },
+  /**
+   * 上传进度版（M14 任务 4）：fetch 拿不到上传字节级进度，改用 XHR。错误语义
+   * 镜像 j()——非 2xx 或网络层失败都推 useErrors 并 reject 一个
+   * `API {status}: ...` 形状的 Error，调用方（VideoLibrary）不需要区分两种
+   * upload 方法的失败处理路径。onProgress 收到 0-100 的百分比；
+   * lengthComputable 为 false（少数环境/代理拿不到 Content-Length）时收到
+   * null，调用方据此切换到不定态进度条。
+   */
+  uploadWithProgress: (file: File, onProgress: (pct: number | null) => void) =>
+    new Promise<Video>((resolve, reject) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      const xhr = new XMLHttpRequest()
+      xhr.upload.onprogress = e => {
+        onProgress(e.lengthComputable ? (e.loaded / e.total) * 100 : null)
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText) as Video)
+          return
+        }
+        const text = xhr.responseText
+        useErrors.getState().pushError(`API ${xhr.status}: ${text.slice(0, 200)}`)
+        reject(new Error(`API ${xhr.status}: ${text}`))
+      }
+      xhr.onerror = () => {
+        useErrors.getState().pushError('API 0: 网络错误，上传失败')
+        reject(new Error('API 0: network error'))
+      }
+      xhr.open('POST', '/api/videos/upload')
+      xhr.send(fd)
+    }),
   pull: (url: string) => post('/api/videos/pull', { url }).then(r => j<Video>(r)),
 
   listAnalyses: (videoId: string) =>

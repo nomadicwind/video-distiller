@@ -193,10 +193,24 @@ export function PlaybookEditor({ playbookId, onBack }: {
 
           <Card title="版本" extra={<Badge kind="accent">当前 v{pb.version}</Badge>}>
             <div className="pbe-versions-row">
-              <select value={rollbackTo} onChange={e => setRollbackTo(e.target.value)}>
-                <option value="">历史版本…</option>
-                {versions.map(v => <option key={v.version} value={v.version}>v{v.version}</option>)}
-              </select>
+              {/* 版本时间线（M14 任务 4：小圆点+连线，纯 CSS——见 styles.css
+                  .version-timeline，不引入图表库）。点一枚圆点即选中待回滚的
+                  版本，等效于原来的 <select>；当前版本的圆点额外填色区分。 */}
+              <div className="version-timeline">
+                {versions.map(v => (
+                  <button key={v.version} type="button"
+                    className={[
+                      'version-dot',
+                      v.version === pb.version ? 'is-current' : '',
+                      String(v.version) === rollbackTo ? 'is-selected' : '',
+                    ].filter(Boolean).join(' ')}
+                    title={`v${v.version} · ${new Date(v.created_at).toLocaleString()}`}
+                    onClick={() => setRollbackTo(String(v.version))}>
+                    <span className="version-dot-mark" />
+                    <span className="version-dot-label">v{v.version}</span>
+                  </button>
+                ))}
+              </div>
               <Button variant="danger" icon={<RotateCcw />} disabled={!rollbackTo}
                 onClick={async () => {
                   const restored = await api.rollbackPlaybook(pb.id, Number(rollbackTo))
