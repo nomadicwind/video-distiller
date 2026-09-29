@@ -17,6 +17,7 @@
   align-items: center;
   gap: 8px;
   color: var(--text-1);
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 14px;
   white-space: nowrap;
@@ -41,6 +42,7 @@
   font-size: 13px;
   padding: 6px 12px;
   cursor: pointer;
+  white-space: nowrap; /* 导航项永不折行——曾在 ~800px 宽度折成"资料/库" */
   transition: color 140ms ease;
 }
 .topbar-nav-btn:hover:not(:disabled) { color: var(--text-1); }
@@ -121,3 +123,12 @@
 .hotkey-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
 .hotkey-keys { display: flex; align-items: center; gap: 4px; flex-shrink: 0; min-width: 72px; }
 .hotkey-label { color: var(--text-2); font-size: 12px; }
+
+/* ---------- 紧凑模式（≤900px）：间距收紧 + 字号下调，导航项不折行 ---------- */
+@media (max-width: 900px) {
+  .topbar { gap: 10px; padding: 0 10px; }
+  .topbar-brand { font-size: 13px; gap: 6px; }
+  .topbar-nav { gap: 0; }
+  .topbar-nav-btn { padding: 6px 8px; font-size: 12px; }
+  .topbar-context { font-size: 11px; }
+}

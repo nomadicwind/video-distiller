@@ -1,8 +1,25 @@
 /* styles.css — 全局基础（tokens.css 之后加载） */
 * { box-sizing: border-box; }
 :root { color-scheme: dark; }
-body { margin: 0; font: 13px/1.5 var(--font-ui); background: var(--bg-app); color: var(--text-1); }
+body {
+  margin: 0;
+  font: 13px/1.5 var(--font-ui);
+  background: linear-gradient(168deg, var(--bg-app), #050506);
+  color: var(--text-1);
+  min-height: 100vh;
+}
+h1 { font-family: var(--font-display); }
 button { font: inherit; }
+
+/* 尊重系统级减少动效偏好：全站过渡/动画归零（辉光同属过渡属性，一并归零） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 input, select, textarea {
   font: inherit; color: var(--text-1); background: var(--bg-inset);
   border: 1px solid var(--border); border-radius: var(--radius-s); padding: 4px 8px;

@@ -31,13 +31,14 @@
 .btn-icon-glyph svg { width: 16px; height: 16px; display: block; }
 .btn-sm .btn-icon-glyph svg { width: 14px; height: 14px; }
 
-/* variant: primary — filled accent */
+/* variant: primary — filled accent (四态：常态/hover/pressed/disabled，
+   disabled 见上面通用 .btn:disabled 规则) */
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--text-1);
 }
-.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn-primary:active:not(:disabled) { filter: brightness(0.92); }
 
 /* variant: ghost — transparent, brighten on hover */
@@ -402,3 +403,34 @@
 .empty-state-icon svg { width: 40px; height: 40px; }
 .empty-state-text { font-size: 13px; color: var(--text-2); max-width: 320px; }
 .empty-state-action { margin-top: 4px; }
+
+/* ---------- 辉光工具类（MASTER 配额：仅播放头针线/录入激活键帽/选中泳道头
+   三处可用，各 ≤ 0 0 10px @20%）。本任务只建立工具类本身；播放头颜色令牌
+   已随 --accent 更新自动流入 timeline/theme.ts 消费的画布绘制，键帽/泳道头
+   两处的接线属于本里程碑后续任务。 */
+.glow-gold { box-shadow: var(--glow-gold); }
+
+/* ---------- ConfirmDialog（破坏性操作确认，spec §交互语言） ---------- */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.confirm-dialog {
+  width: min(360px, calc(100vw - 48px));
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-2);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.confirm-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-1); }
+.confirm-body { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }

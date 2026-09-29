@@ -1,7 +1,11 @@
 import type { ReactNode } from 'react'
+import { forwardRef } from 'react'
 import { Tooltip } from './Tooltip'
 
-export function Button(props: {
+/* forwardRef (additive, no existing call site passes a ref today): needed so
+   ConfirmDialog (M14 任务 1) can set initial keyboard focus on its 取消
+   button without duplicating <button className="btn ..."> markup. */
+export const Button = forwardRef<HTMLButtonElement, {
   variant?: 'primary' | 'ghost' | 'danger' | 'icon'
   size?: 'md' | 'sm'
   icon?: ReactNode
@@ -10,7 +14,7 @@ export function Button(props: {
   active?: boolean
   onClick?: () => void
   children?: ReactNode
-}): JSX.Element {
+}>(function Button(props, ref) {
   const { variant = 'ghost', size = 'md', icon, tip, disabled, active, onClick, children } = props
   const classes = [
     'btn',
@@ -27,6 +31,7 @@ export function Button(props: {
 
   const button = (
     <button
+      ref={ref}
       type="button"
       className={classes}
       disabled={disabled}
@@ -43,4 +48,4 @@ export function Button(props: {
     return <Tooltip tip={tip}>{button}</Tooltip>
   }
   return button
-}
+})
