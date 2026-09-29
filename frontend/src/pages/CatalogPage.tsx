@@ -6,69 +6,35 @@ import { useErrors } from '../state/errors'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { EmptyState } from '../ui/EmptyState'
 import { Field } from '../ui/Field'
+import { PatternBuilder } from './PatternBuilder'
+import { PatternChain } from './PatternChain'
 
-const EMPTY = { name: '', class_: '', cd_ms: '', cast_ms: '', anim_ms: '', pattern: '[]' }
+const EMPTY = { name: '', class_: '', cd_ms: '', cast_ms: '', anim_ms: '', pattern: [] as PatternItem[] }
 
 const layerOf = (pattern: PatternItem[]) =>
   pattern.some(i => i.op === 'skill') ? 'L2' : 'L1'
-
-type BadgeKind = 'accent' | 'success' | 'warn' | 'danger' | 'neutral'
-
-/** op → 徽章色系（spec §7：pattern 展示为 op 类型徽章链）。 */
-const OP_BADGE_KIND: Record<PatternItem['op'], BadgeKind> = {
-  tap: 'accent', hold: 'accent', chord: 'accent', wheel: 'accent', gap: 'neutral', skill: 'warn',
-}
-
-function opLabel(item: PatternItem): string {
-  switch (item.op) {
-    case 'tap': return `tap ${item.key ?? ''}`
-    case 'hold': return `hold ${item.key ?? ''}${item.ms != null ? ` ${item.ms}ms` : ''}`
-    case 'chord': return `chord ${(item.keys ?? []).join('+')}`
-    case 'wheel': return `wheel ${item.button ?? ''}`
-    case 'gap': return `gap ${item.ms ?? '—'}ms`
-    case 'skill': return `skill ${item.ref ?? ''}`
-    default: return item.op
-  }
-}
-
-function PatternChain({ pattern }: { pattern: PatternItem[] }): JSX.Element {
-  if (pattern.length === 0) return <span className="op-chain-empty">—</span>
-  return (
-    <div className="op-chain">
-      {pattern.map((item, i) => (
-        <Badge key={i} kind={OP_BADGE_KIND[item.op]}>{opLabel(item)}</Badge>
-      ))}
-    </div>
-  )
-}
 
 export function CatalogPage({ onBack }: { onBack: () => void }) {
   void onBack // TopBar 导航已常驻，页内不再自带 ← 返回（spec §7）
   const [skills, setSkills] = useState<Skill[]>([])
   const [form, setForm] = useState({ ...EMPTY })
   const [editing, setEditing] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Skill | null>(null)
 
   const refresh = () => { void api.listSkills().then(setSkills) }
   useEffect(refresh, [])
 
-  const parsePattern = (): PatternItem[] | null => {
-    try {
-      const p = JSON.parse(form.pattern)
-      return Array.isArray(p) ? p : null
-    } catch { return null }
-  }
-
   const submit = async () => {
-    const pattern = parsePattern()
-    if (!form.name || pattern === null) {
-      useErrors.getState().pushError('技能名必填，pattern 必须是合法 JSON 数组')
+    if (!form.name) {
+      useErrors.getState().pushError('技能名必填')
       return
     }
     const num = (v: string) => (v === '' ? undefined : Number(v))
     const payload = { name: form.name, class_: form.class_ || undefined,
-      cd_ms: num(form.cd_ms), cast_ms: num(form.cast_ms), anim_ms: num(form.anim_ms), pattern }
+      cd_ms: num(form.cd_ms), cast_ms: num(form.cast_ms), anim_ms: num(form.anim_ms), pattern: form.pattern }
     if (editing) await api.patchSkill(editing, payload)
     else await api.createSkill(payload)
     setForm({ ...EMPTY }); setEditing(null); refresh()
@@ -79,7 +45,7 @@ export function CatalogPage({ onBack }: { onBack: () => void }) {
     setForm({ name: s.name, class_: s.class ?? '',
       cd_ms: s.cd_ms?.toString() ?? '', cast_ms: s.cast_ms?.toString() ?? '',
       anim_ms: s.anim_ms?.toString() ?? '',
-      pattern: JSON.stringify(s.pattern, null, 1) })
+      pattern: s.pattern })
   }
 
   return (
@@ -112,7 +78,7 @@ export function CatalogPage({ onBack }: { onBack: () => void }) {
                   <td><PatternChain pattern={s.pattern} /></td>
                   <td onClick={e => e.stopPropagation()}>
                     <Button variant="danger" size="sm" icon={<Trash2 />} tip="删除技能"
-                      onClick={async () => { await api.deleteSkill(s.id); refresh() }} />
+                      onClick={() => setDeleteTarget(s)} />
                   </td>
                 </tr>
               ))}
@@ -139,9 +105,13 @@ export function CatalogPage({ onBack }: { onBack: () => void }) {
             <input value={form.anim_ms} onChange={e => setForm({ ...form, anim_ms: e.target.value })} />
           </Field>
           <div className="form-grid-full">
-            <Field label="pattern（JSON 数组）">
-              <textarea rows={5} value={form.pattern}
-                onChange={e => setForm({ ...form, pattern: e.target.value })} />
+            <Field label="Pattern">
+              {/* key 换成"正在编辑的技能 id"（新建时固定为一个占位值）：切换编辑
+                  目标时强制重新挂载，构建器内部块列表/JSON 草稿状态整体重置，
+                  而不是被一个持续盯着 form.pattern 的 effect 半途接管——见
+                  PatternBuilder 顶部注释。 */}
+              <PatternBuilder key={editing ?? '_new'} value={form.pattern}
+                onChange={pattern => setForm(f => ({ ...f, pattern }))} />
             </Field>
           </div>
           <div className="form-grid-full form-actions">
@@ -153,12 +123,23 @@ export function CatalogPage({ onBack }: { onBack: () => void }) {
                 onClick={() => { setEditing(null); setForm({ ...EMPTY }) }}>取消编辑</Button>
             )}
           </div>
-          <p className="form-grid-full form-hint">
-            pattern 示例：<code>{'[{"op":"tap","key":"2"}]'}</code> · gap 项 <code>{'{"op":"gap","ms":300,"tol_ms":80}'}</code> ·
-            连招引用 <code>{'{"op":"skill","ref":"sk_xxx"}'}</code>（含 skill 引用即 L2）
-          </p>
         </div>
       </Card>
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="删除技能"
+          body={`确认删除技能「${deleteTarget.name}」？键位绑定、循环与连招 pattern 中对它的引用都将悬挂（指向一个不存在的技能），此操作不可撤销。`}
+          confirmLabel="删除"
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            const target = deleteTarget
+            setDeleteTarget(null)
+            await api.deleteSkill(target.id)
+            refresh()
+          }}
+        />
+      )}
     </div>
   )
 }

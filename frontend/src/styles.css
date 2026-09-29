@@ -131,6 +131,15 @@ canvas { display: block; }
 .op-chain { display: flex; flex-wrap: wrap; gap: 4px; }
 .op-chain-empty { color: var(--text-3); font-size: 12px; }
 
+/* PatternBuilder：块列表复用 PlaybookEditor 的 .pbe-block-row 系（见下方
+   ---------- PlaybookEditor ---------- 分区），这里只加块视图独有的几条 */
+.pattern-builder { display: flex; flex-direction: column; gap: 10px; }
+.pattern-preview-label { margin: 4px 0 0; font-size: 11px; color: var(--text-3); }
+.pattern-json { font-size: 12px; }
+.pattern-json summary { cursor: pointer; color: var(--text-2); margin-bottom: 6px; }
+.pattern-json textarea { width: 100%; }
+.pattern-json-error { margin: 4px 0 0; color: var(--danger); font-size: 11px; }
+
 /* 表单网格：CatalogPage/KeymapPage 表单入 Card 后的字段布局 */
 .form-grid {
   display: grid;
@@ -152,6 +161,39 @@ canvas { display: block; }
 .chord-preview { display: flex; flex-wrap: wrap; gap: 10px; }
 .chord-group { display: inline-flex; align-items: center; gap: 4px; }
 .chord-sep { color: var(--text-3); font-size: 12px; }
+
+/* KeymapPage：既有 keymap 卡片列表（按 id 分组取最新版） */
+.km-card-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.km-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  cursor: pointer;
+  text-align: left;
+  transition: background 160ms ease-out, border-color 160ms ease-out;
+}
+.km-card:hover { background: var(--bg-control-hover); }
+.km-card.is-current { border-color: var(--accent); }
+.km-card-id { color: var(--text-1); font-size: 13px; font-weight: 600; }
+.km-card-meta { color: var(--text-3); font-size: 11px; }
+
+/* KeymapPage：重复技能绑定非阻塞警告条 */
+.km-dup-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  color: var(--warn);
+  font-size: 12px;
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius-s);
+}
 
 /* 小号弱化文字（表格内备注/版本号等次要信息） */
 .pb-muted { color: var(--text-3); font-size: 12px; }
@@ -657,6 +699,36 @@ canvas { display: block; }
 .tl-canvas-wrap { min-width: 0; min-height: 0; overflow-x: auto; overflow-y: auto; touch-action: none; }
 
 /* ---------- Inspector / InferPanel (spec §5.2/§7/§8-8) ---------- */
+/* InferPanel：推断就绪引导卡——三行检查 + 未覆盖标签 chips（M14 任务 3） */
+.readiness-card { display: flex; flex-direction: column; gap: 8px; }
+.readiness-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg-panel);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius-s);
+}
+.readiness-row-ok { border-left-color: var(--success); }
+.readiness-row-bad {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+.readiness-row-warn {
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+}
+.readiness-row-icon { display: flex; flex-shrink: 0; }
+.readiness-row-ok .readiness-row-icon { color: var(--success); }
+.readiness-row-bad .readiness-row-icon { color: var(--danger); }
+.readiness-row-warn .readiness-row-icon { color: var(--warn); }
+.readiness-row-text { flex: 1; }
+.readiness-row-action { flex-shrink: 0; }
+.readiness-uncovered { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 2px; }
+
 .infer-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* 对齐结果卡：冲突行 warn 左边条（点击跳转，语义不变），反推行素色 */

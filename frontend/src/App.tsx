@@ -176,13 +176,16 @@ const INSPECTOR_TABS: { key: InspectorTab; label: string }[] = [
   { key: 'infer', label: '推断' },
 ]
 
-/** Inspector 容器（spec §5.2）：标注/推断页签，局部状态，默认标注。 */
+/** Inspector 容器（spec §5.2）：标注/推断页签，局部状态，默认标注。
+ * onGotoAnnotate 下传给 InferPanel 的就绪引导卡「去标注」按钮——切标注页签
+ * 这件事只有这个组件知道怎么做（tab 是它的局部 state），InferPanel 自己
+ * 不该也不需要知道 Inspector 内部有几个页签。 */
 function Inspector(): JSX.Element {
   const [tab, setTab] = useState<InspectorTab>('annotate')
   return (
     <>
       <Tabs tabs={INSPECTOR_TABS} active={tab} onChange={k => setTab(k as InspectorTab)} />
-      {tab === 'annotate' ? <EntryPanel /> : <InferPanel />}
+      {tab === 'annotate' ? <EntryPanel /> : <InferPanel onGotoAnnotate={() => setTab('annotate')} />}
     </>
   )
 }
@@ -208,6 +211,7 @@ function WorkbenchTopContext({ onBack }: { onBack: () => void }): JSX.Element | 
       <Button variant="ghost" size="sm" icon={<ArrowLeft />} onClick={onBack}>返回</Button>
       <span className="topbar-context-name">{analysis.name}</span>
       <select
+        id="workbench-keymap-select"
         value={analysis.keymap_id ? `${analysis.keymap_id}@${analysis.keymap_version}` : ''}
         onChange={async e => {
           const [kid, ver] = e.target.value.split('@')
