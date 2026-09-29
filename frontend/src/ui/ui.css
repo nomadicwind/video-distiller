@@ -32,11 +32,14 @@
 .btn-sm .btn-icon-glyph svg { width: 14px; height: 14px; }
 
 /* variant: primary — filled accent (四态：常态/hover/pressed/disabled，
-   disabled 见上面通用 .btn:disabled 规则) */
+   disabled 见上面通用 .btn:disabled 规则)。color 用 --on-accent，不用
+   --text-1——暖白对金底只有 1.88:1，不达标（见 tokens.css --on-accent 注
+   释）。:active 的 filter(0.92) 对 bg/fg 等比例缩放，缩放后仍有 7.02:1
+   （已计算），无需换成显式的按下态令牌。 */
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--text-1);
+  color: var(--on-accent);
 }
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn-primary:active:not(:disabled) { filter: brightness(0.92); }
@@ -414,7 +417,7 @@
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, .5);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;

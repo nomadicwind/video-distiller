@@ -102,11 +102,11 @@
 .statusbar-sep { color: var(--border); }
 
 /* ---------- HotkeyOverlay (spec §4/§8#7, full-screen mask) ---------- */
-/* rgba(0,0,0,.6) 遮罩为 spec 明定的字面量，非令牌遗漏（同 draw.ts 气泡黑白）。 */
+/* 遮罩令牌与 ConfirmDialog 统一（复查修复）：原字面量 .6 收到 --scrim 的 .5。 */
 .hotkey-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, .6);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;

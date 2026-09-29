@@ -4,7 +4,8 @@
 
 :root {
   /* 底色三层 */
-  --bg-app: #0a0a0f;        /* 应用底 */
+  --bg-app: #0a0a0f;        /* 应用底（body 渐变起点） */
+  --bg-app-deep: #050506;   /* body 168deg 渐变终点 */
   --bg-panel: #121217;      /* 面板 */
   --bg-elevated: #17171f;   /* 卡片/悬浮 */
   --bg-control: #1e1e28;    /* 控件底 */
@@ -13,6 +14,8 @@
   /* 边界 */
   --border: rgba(255, 255, 255, .10);
   --border-subtle: rgba(255, 255, 255, .06);
+  /* 遮罩（ConfirmDialog/HotkeyOverlay 弹层背板统一） */
+  --scrim: rgba(0, 0, 0, .5);
   /* 文字 */
   --text-1: #ece7dc;
   --text-2: #a8a294;
@@ -21,6 +24,10 @@
   --accent: #d4a24e;
   --accent-hover: #e0b566;
   --accent-soft: rgba(212, 162, 78, .14);
+  /* 金底上的文字/图标色：--text-1 对 --accent 仅 1.88:1，不达标——填充金色
+     surface（按钮/chip 等）一律用这个而非 --text-1。对 --accent 8.19:1、
+     对 --accent-hover 9.9:1（已计算，两者都留足余量）。 */
+  --on-accent: #14100a;
   --success: #7fae62;
   --warn: #d9873a;
   --danger: #e5544b;

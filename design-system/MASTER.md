@@ -11,7 +11,8 @@
 
 | 令牌 | 值 | 用途 |
 |---|---|---|
-| --bg-app | #0a0a0f | 应用底（可配 body 线性渐变至 #050506，168deg） |
+| --bg-app | #0a0a0f | 应用底（body 线性渐变起点，168deg） |
+| --bg-app-deep | #050506 | 应用底渐变终点（body 168deg 渐变的深端） |
 | --bg-panel | #121217 | 面板 |
 | --bg-elevated | #17171f | 卡片/行 |
 | --bg-inset | #060609 | 内嵌（监视器槽、日志、输入框底） |
@@ -20,8 +21,10 @@
 | --accent | #d4a24e | 鎏金主强调（选中、主按钮、播放头、焦点环） |
 | --accent-hover | #e0b566 | 强调悬停 |
 | --accent-soft | rgba(212,162,78,.14) | 强调弱底 |
+| --on-accent | #14100a | 金底上的文字/图标色（深墨），对 --accent 8.19:1、对 --accent-hover 9.9:1——金面禁用 --text-1（1.88:1，不合格） |
 | --border | rgba(255,255,255,.10) | 常规描边 |
 | --border-subtle | rgba(255,255,255,.06) | 发丝线 |
+| --scrim | rgba(0,0,0,.5) | 模态/浮层遮罩底（ConfirmDialog、HotkeyOverlay 统一） |
 | --text-1 | #ece7dc | 主文（暖白，衬影调底） |
 | --text-2 | #a8a294 | 次文 |
 | --text-3 | #6b675d | 弱文 |

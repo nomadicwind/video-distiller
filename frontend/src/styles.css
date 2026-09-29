@@ -4,7 +4,7 @@
 body {
   margin: 0;
   font: 13px/1.5 var(--font-ui);
-  background: linear-gradient(168deg, var(--bg-app), #050506);
+  background: linear-gradient(168deg, var(--bg-app), var(--bg-app-deep));
   color: var(--text-1);
   min-height: 100vh;
 }
@@ -555,7 +555,7 @@ canvas { display: block; }
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 .take-chip:hover { background: var(--bg-control-hover); }
-.take-chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--text-1); }
+.take-chip.is-current { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .take-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* L1/L2：技能名输入 + datalist + 插入（M10 任务 1：随打点条一起迁移到
