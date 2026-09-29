@@ -414,14 +414,22 @@ canvas { display: block; }
   flex-direction: column;
 }
 
-/* ---------- 对比条内容（M12 任务 3） ---------- */
+/* ---------- 对比条内容（M12 任务 3；task-2 卡片化分组） ---------- */
 .compare-bar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
   min-height: 28px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-m);
 }
+/* 三组：开关+选择 ｜ 校准组 ｜ 偏移组（App.tsx CompareBar 按这三段包了
+   .compare-group 容器，仅 className/结构，逻辑不变）——组间发丝分隔线，组内
+   仍是各控件自身间距。第一组没有左边线（它是这一行的起点）。 */
+.compare-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.compare-group + .compare-group { padding-left: 12px; border-left: 1px solid var(--border-subtle); }
 .compare-bar select { max-width: 220px; }
 .compare-offset-label { color: var(--text-2); font-size: 12px; white-space: nowrap; }
 .compare-offset-unit { color: var(--text-3); font-size: 12px; }
@@ -634,7 +642,10 @@ canvas { display: block; }
   gap: 6px;
   overflow-x: auto;
   padding: 0 8px;
-  background: var(--bg-panel);
+  /* task-2 底色分层：EntryStrip 是这一屏真正在操作的那一层（键帽/Switch/
+     技能输入都在这条带上），比它上面纯导航用途的 Toolbar（仍是 --bg-panel）
+     高一阶到 --bg-elevated，靠表面色阶而非新描边表达层级（MASTER §形态）。 */
+  background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-subtle);
 }
 

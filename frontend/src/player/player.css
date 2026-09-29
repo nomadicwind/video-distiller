@@ -12,6 +12,9 @@
 .monitor {
   background: var(--bg-inset);
   border-radius: var(--radius-m);
+  /* 监视器槽发丝内描边（task-2 工作台精修）：box-sizing:border-box 是全站
+     基础规则（styles.css），加 1px border 不影响尺寸计算。 */
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -118,7 +121,19 @@
   border-radius: var(--radius-m);
 }
 
-.transport-controls { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+/* task-2 工作台精修：Transport 按钮组统一新控件形态——一个 bg-control 底的
+   圆角胶囊容器把 跳开头/上一帧/播放/下一帧/倍速 揉成一组，而不是几枚各自
+   悬浮的图标按钮；组内按钮自身继续用既有 .btn-icon 悬停态，容器只负责
+   "看起来是一组"。 */
+.transport-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 2px;
+  background: var(--bg-control);
+  border-radius: var(--radius-m);
+}
 
 .transport-play .btn-icon-only { width: 36px; height: 36px; }
 .transport-play .btn-icon-glyph svg { width: 20px; height: 20px; }

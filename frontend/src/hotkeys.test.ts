@@ -19,7 +19,7 @@ vi.mock('./api/client', () => ({
 }))
 
 import { api } from './api/client'
-import { handleEntryInsert } from './hotkeys'
+import { handleEntryInsert, handleEscapeKey } from './hotkeys'
 
 const tree: AnalysisTree = {
   id: 'an_1', video_id: 'v', name: 'n', tally: [],
@@ -67,4 +67,20 @@ test('handleEntryInsert does not record lastEntry when insertAtPlayhead fails ou
   vi.mocked(api.newMark).mockRejectedValueOnce(new Error('API 400: 与相邻标记距离过近（同一帧内）'))
   await handleEntryInsert('Q')
   expect(useSession.getState().lastEntry).toBeNull()
+})
+
+// task-2: Esc 退出录入模式——must never create a mark (api.newMark untouched)
+// and must actually flip entryMode off.
+test('handleEscapeKey turns entry mode off and creates no mark', () => {
+  useSession.setState({ entryMode: true })
+  expect(handleEscapeKey()).toBe(true)
+  expect(useSession.getState().entryMode).toBe(false)
+  expect(api.newMark).not.toHaveBeenCalled()
+})
+
+test('handleEscapeKey is a no-op when entry mode is already off', () => {
+  useSession.setState({ entryMode: false })
+  expect(handleEscapeKey()).toBe(false)
+  expect(useSession.getState().entryMode).toBe(false)
+  expect(api.newMark).not.toHaveBeenCalled()
 })

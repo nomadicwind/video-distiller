@@ -1,4 +1,4 @@
-export function Keycap({ label, onClick, wide, inert, pressed, armed, compact }: {
+export function Keycap({ label, onClick, wide, inert, pressed, armed, compact, entryActive }: {
   label: string
   onClick?: () => void
   wide?: boolean
@@ -26,8 +26,16 @@ export function Keycap({ label, onClick, wide, inert, pressed, armed, compact }:
    * 不传，继续用标准尺寸。
    */
   compact?: boolean
+  /**
+   * 辉光配额之一（MASTER.md 三处限额）：录入模式开启时，EntryStrip 给 L0
+   * 基键键帽整体传 true——提示"这些键此刻按下去会打点"，呼应
+   * global-constraints 反复强调的误触风险。复用 Task 1 已建好的
+   * --glow-gold token / .glow-gold 工具类（ui.css），这里是它的第一个
+   * 消费点。
+   */
+  entryActive?: boolean
 }): JSX.Element {
-  const className = `keycap${wide ? ' keycap-wide' : ''}${inert ? ' keycap-inert' : ''}${pressed ? ' keycap-pressed' : ''}${armed ? ' keycap-armed' : ''}${compact ? ' keycap-compact' : ''}`
+  const className = `keycap${wide ? ' keycap-wide' : ''}${inert ? ' keycap-inert' : ''}${pressed ? ' keycap-pressed' : ''}${armed ? ' keycap-armed' : ''}${compact ? ' keycap-compact' : ''}${entryActive ? ' glow-gold' : ''}`
   if (inert) {
     return <span className={className}>{label}</span>
   }

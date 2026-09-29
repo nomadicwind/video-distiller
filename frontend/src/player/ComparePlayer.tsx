@@ -122,6 +122,14 @@ export function ComparePlayer({ videoId, durationMs, fps }: {
   const playheadMs = useSession(s => s.playheadMs)
   const offsetMs = useSession(s => s.compareOffsetMs)
   const calibrating = useSession(s => s.calibrating)
+  // task-2 UX 修复清单 ④：B 的 <video> onError → 持续态遮罩「对比视频加载
+  // 失败」，直到换了对比视频或清除对比才复位。ComparePlayer 本身在「清除
+  // 对比」时会随父级 showCompare 变 false 一起卸载（Player.tsx），卸载=下
+  // 次挂载重新拿到初始 state，天然复位；但「换一个对比视频」时 videoId 只是
+  // 换了 prop，同一个组件实例继续活着，所以还需要下面这个按 videoId 清零的
+  // effect。
+  const [loadError, setLoadError] = useState(false)
+  useEffect(() => { setLoadError(false) }, [videoId])
 
   const target = followTarget(playheadMs, offsetMs, durationMs)
 
@@ -173,11 +181,20 @@ export function ComparePlayer({ videoId, durationMs, fps }: {
 
   return (
     <>
-      <video ref={ref} id="vd-video-b" muted playsInline src={api.videoFileUrl(videoId)} />
-      {!calibrating && !target.inRange && (
+      <video
+        ref={ref} id="vd-video-b" muted playsInline
+        src={api.videoFileUrl(videoId)}
+        onError={() => setLoadError(true)}
+      />
+      {/* 加载失败是持续态，优先级高于校准/出界——复用同一套 .compare-mask
+          样式，只换文案，不新增一套遮罩规则。 */}
+      {loadError && (
+        <div className="compare-mask"><span>对比视频加载失败</span></div>
+      )}
+      {!loadError && !calibrating && !target.inRange && (
         <div className="compare-mask"><span>超出对比视频范围</span></div>
       )}
-      {calibrating && <CalibrationBar durationMs={durationMs} fps={fps} />}
+      {!loadError && calibrating && <CalibrationBar durationMs={durationMs} fps={fps} />}
     </>
   )
 }

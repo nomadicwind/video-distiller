@@ -23,7 +23,12 @@ export const HOTKEYS: HotkeyRow[] = [
   { keys: ['⌘/Ctrl + Z'], label: '撤销' },
   { keys: ['⌘/Ctrl + Shift + Z'], label: '重做' },
   { keys: ['T'], label: '打表', statusbar: true },
-  { keys: ['E'], label: '录入模式', statusbar: true, statusbarLabel: '录入' },
+  { keys: ['E'], label: '录入模式（录入中按 Esc 退出）', statusbar: true, statusbarLabel: '录入' },
+  // task-2 UX 修复清单 ③：Esc 只在录入模式开启时生效，且只关闭录入模式本身
+  // ——不产生任何标记，也不影响其它场景下 Esc 的原生行为（文本框内 blur、
+  // 打表回填 Popover 自己的 Escape 关闭监听）。不进 StatusBar（留给 E 行的
+  // 括注承担发现性，浮层这里给完整说明）。
+  { keys: ['Esc'], label: '退出录入模式（仅录入模式开启时生效）' },
   { keys: ['A'], label: '聚合' },
   { keys: ['S'], label: '吸附' },
   // M7 任务 3：跨层参考线（仅展示 L1 当前 take 的标记位置，不产生数据）。

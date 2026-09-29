@@ -48,6 +48,31 @@ export async function handleEntryInsert(label: string): Promise<void> {
   if (ok) useSession.getState().recordEntry(label)
 }
 
+/**
+ * Esc 退出录入模式（global-constraints §UX 修复清单 ③）：录入模式开启时按
+ * Esc = 关闭录入模式，不打任何点、不消费任何字母/数字。在 onKey 里，这条
+ * 判断被放在 entryMode+L0 拦截分支（下面 composeEntryLabel 那段）之前——
+ * 严格说 Escape 的 e.code 本就不匹配 DIGIT_RE/LETTER_RE（entry/chord.ts），
+ * 天然不会被那条分支吞掉，但把 Esc 分支物理上放在更靠前的位置，是"读一遍
+ * 分支顺序就能确认安全"，而不是依赖 composeEntryLabel 内部实现细节这个巧合
+ * ——万一以后那条正则改了匹配范围，Esc 也不会被连带影响。
+ *
+ * 文本输入框内按 Esc 不受影响：isTextEntryTarget 守卫在 onKey 最开头就短路
+ * 返回了，走浏览器原生 blur 语义，这个函数根本不会被调用。
+ *
+ * 抽成可测试的纯函数（同 handleEntryInsert 上面的既有惯例——项目 vitest
+ * 环境是 'node'，没有 jsdom，不能廉价地派发一个真实 KeyboardEvent('Escape')
+ * 走完整个 onKey 闭包）：返回 true 表示这次 Esc 被录入模式消费了（调用方据
+ * 此决定要不要 preventDefault）；false 表示啥也没做，交给其它监听器（比如
+ * Transport.tsx 打表回填 Popover 自己的 Escape 监听）处理。
+ */
+export function handleEscapeKey(): boolean {
+  const st = useSession.getState()
+  if (!st.entryMode) return false
+  st.toggleEntryMode()
+  return true
+}
+
 export function useHotkeys(video: Video): void {
   const fps = video.fps ?? 30
   const durationMs = video.duration_ms ?? 0
@@ -66,6 +91,10 @@ export function useHotkeys(video: Video): void {
         return
       }
       const st = useSession.getState()
+      if (e.key === 'Escape') {
+        if (handleEscapeKey()) e.preventDefault()
+        return
+      }
       const lane = st.analysis?.lanes.find(l => l.id === st.laneId)
       // composeEntryLabel is keyed off e.code (layout/modifier-independent),
       // not e.key — the old /^[a-z0-9]$/i.test(e.key) predicate silently

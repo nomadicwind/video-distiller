@@ -123,38 +123,47 @@ function CompareBar({ video }: { video: Video }): JSX.Element {
 
   return (
     <div className="compare-bar">
-      <Switch checked={compareOn} onChange={onSwitchToggle} label="对比" />
-      <select
-        aria-label="选择对比视频"
-        value={compareVideoId ?? ''}
-        onChange={onSelectChange}
-      >
-        <option value="">选择对比视频</option>
-        {readyVideos.map(v => (
-          <option key={v.id} value={v.id}>{`video-${v.seq} · ${ellipsizeVideoName(v.name)}`}</option>
-        ))}
-        {compareVideoId && <option value={CLEAR_COMPARE_VALUE}>清除对比</option>}
-      </select>
+      {/* 分组一：开关 + 选择视频（task-2 卡片化，见 styles.css .compare-group） */}
+      <div className="compare-group">
+        <Switch checked={compareOn} onChange={onSwitchToggle} label="对比" />
+        <select
+          aria-label="选择对比视频"
+          value={compareVideoId ?? ''}
+          onChange={onSelectChange}
+        >
+          <option value="">选择对比视频</option>
+          {readyVideos.map(v => (
+            <option key={v.id} value={v.id}>{`video-${v.seq} · ${ellipsizeVideoName(v.name)}`}</option>
+          ))}
+          {compareVideoId && <option value={CLEAR_COMPARE_VALUE}>清除对比</option>}
+        </select>
+      </div>
       {extendedControlsShown && (
         <>
-          <Button variant="ghost" size="sm" active={calibrating} onClick={onToggleCalibrate}>校准</Button>
-          {calibrating && (
-            <Button variant="primary" size="sm" onClick={onAlign}>以当前两帧对齐</Button>
-          )}
-          <span className="compare-offset-label">偏移</span>
-          <input
-            type="number"
-            className="mono"
-            aria-label="偏移 ms"
-            value={offsetInput}
-            onChange={e => setOffsetInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-            onBlur={commitOffset}
-          />
-          <span className="compare-offset-unit">ms</span>
-          <Button variant="ghost" size="sm" onClick={() => nudgeOffset(-1)}>−1帧</Button>
-          <Button variant="ghost" size="sm" onClick={() => nudgeOffset(1)}>+1帧</Button>
-          <span className="compare-b-tc mono">B {fmtTc(bMs)}</span>
+          {/* 分组二：校准组 */}
+          <div className="compare-group">
+            <Button variant="ghost" size="sm" active={calibrating} onClick={onToggleCalibrate}>校准</Button>
+            {calibrating && (
+              <Button variant="primary" size="sm" onClick={onAlign}>以当前两帧对齐</Button>
+            )}
+          </div>
+          {/* 分组三：偏移组 */}
+          <div className="compare-group">
+            <span className="compare-offset-label">偏移</span>
+            <input
+              type="number"
+              className="mono"
+              aria-label="偏移 ms"
+              value={offsetInput}
+              onChange={e => setOffsetInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+              onBlur={commitOffset}
+            />
+            <span className="compare-offset-unit">ms</span>
+            <Button variant="ghost" size="sm" onClick={() => nudgeOffset(-1)}>−1帧</Button>
+            <Button variant="ghost" size="sm" onClick={() => nudgeOffset(1)}>+1帧</Button>
+            <span className="compare-b-tc mono">B {fmtTc(bMs)}</span>
+          </div>
         </>
       )}
     </div>

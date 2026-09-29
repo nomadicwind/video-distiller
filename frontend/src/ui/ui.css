@@ -408,9 +408,10 @@
 .empty-state-action { margin-top: 4px; }
 
 /* ---------- 辉光工具类（MASTER 配额：仅播放头针线/录入激活键帽/选中泳道头
-   三处可用，各 ≤ 0 0 10px @20%）。本任务只建立工具类本身；播放头颜色令牌
-   已随 --accent 更新自动流入 timeline/theme.ts 消费的画布绘制，键帽/泳道头
-   两处的接线属于本里程碑后续任务。 */
+   三处可用，各 ≤ 0 0 10px @20%）。三处均已接线（task-2）：本工具类供
+   EntryStrip 的 L0 键帽（录入模式开启时）消费；播放头针线/选中泳道头两处
+   是画布绘制，走 timeline/draw.ts 里等价的 shadowBlur（canvas 无
+   box-shadow），颜色令牌同样来自 --accent，三处口径一致。 */
 .glow-gold { box-shadow: var(--glow-gold); }
 
 /* ---------- ConfirmDialog（破坏性操作确认，spec §交互语言） ---------- */

@@ -138,8 +138,16 @@ export function draw(ctx: CanvasRenderingContext2D, d: TimelineData): void {
     if (selected) {
       ctx.fillStyle = withAlpha(theme.accent, 0.06)
       ctx.fillRect(GUTTER_W, laneY, v.widthPx, LANE_H)
+      // 辉光配额之三（MASTER 三处限额）：选中泳道头金色指示——只给这一格
+      // 沟槽底色加一圈 ≤10px @20% 的金色柔光，让"当前选中泳道"在沟槽列里
+      // 更醒目；save/restore 把 shadow 限定在这一次 fillRect，不泄漏到后面
+      // 的 dot/文字/badge 绘制。
+      ctx.save()
+      ctx.shadowColor = withAlpha(theme.accent, 0.2)
+      ctx.shadowBlur = 8
       ctx.fillStyle = theme.accentSoft
       ctx.fillRect(0, laneY, GUTTER_W, LANE_H)
+      ctx.restore()
       ctx.fillStyle = color
       ctx.fillRect(0, laneY, 3, LANE_H)
     }
@@ -489,14 +497,21 @@ export function draw(ctx: CanvasRenderingContext2D, d: TimelineData): void {
     ctx.restore()
   }
 
-  // ---- 9. 播放头：全高白线 + 标尺内三角手柄 + 时码气泡（悬停/拖动时） ----
+  // ---- 9. 播放头：全高金线（辉光配额之一：≤10px @20%）+ 标尺内三角手柄 +
+  // 时码气泡（悬停/拖动时）。针线与手柄统一用 --accent（MASTER：播放头 ∈
+  // 金色强调元素），此前针线误留 text1（白），手柄早已是 accent——两者应
+  // 是同一根指针，颜色不该分裂。 ----
   const phX = GUTTER_W + msToPx(v, d.playheadMs)
-  ctx.strokeStyle = theme.text1
+  ctx.save()
+  ctx.shadowColor = withAlpha(theme.accent, 0.2)
+  ctx.shadowBlur = 8
+  ctx.strokeStyle = theme.accent
   ctx.lineWidth = 1.5
   ctx.beginPath()
   ctx.moveTo(phX, 0)
   ctx.lineTo(phX, height)
   ctx.stroke()
+  ctx.restore()
 
   ctx.fillStyle = theme.accent
   ctx.beginPath()

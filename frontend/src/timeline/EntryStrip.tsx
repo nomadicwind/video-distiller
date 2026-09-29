@@ -85,7 +85,7 @@ export function EntryStrip(): JSX.Element | null {
               })} />
           ))}
           {L0_KEYS.map(k => (
-            <Keycap key={k} label={k} compact pressed={isBasePressed(k)}
+            <Keycap key={k} label={k} compact pressed={isBasePressed(k)} entryActive={s.entryMode}
               onClick={() => {
                 const label = [...MODIFIERS.filter(m => armed.has(m)), k].join('+')
                 void insertAtPlayhead('input', label)
