@@ -123,9 +123,12 @@ export function useHotkeys(video: Video): void {
       if (e.key === ' ') {
         e.preventDefault()
         togglePlay()
-      } else if (e.key === '[') {
+      } else if (e.key === '[' || e.key === 'ArrowLeft') {
+        // 方向键有浏览器默认行为（滚动/焦点移动），需拦截；[ ] 无默认行为
+        e.preventDefault()
         frameStep(-1, fps, durationMs)
-      } else if (e.key === ']') {
+      } else if (e.key === ']' || e.key === 'ArrowRight') {
+        e.preventDefault()
         frameStep(1, fps, durationMs)
       } else if (e.key === ',') {
         void nudgeSelected(-10)

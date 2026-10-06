@@ -17,7 +17,8 @@ export interface HotkeyRow {
 
 export const HOTKEYS: HotkeyRow[] = [
   { keys: ['空格'], label: '播放/暂停', statusbar: true, statusbarLabel: '播放' },
-  { keys: ['[', ']'], label: '逐帧', statusbar: true },
+  { keys: ['←', '→'], label: '逐帧', statusbar: true },
+  { keys: ['[', ']'], label: '逐帧', statusbar: false },
   { keys: [',', '.'], label: '微移 ±10ms' },
   { keys: ['Delete'], label: '删除标记' },
   { keys: ['⌘/Ctrl + Z'], label: '撤销' },
