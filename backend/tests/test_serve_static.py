@@ -149,6 +149,8 @@ def test_serve_main_custom_port_and_no_browser_skips_timer(monkeypatch):
 
 def test_run_ytdlp_frozen_uses_python_api(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.delenv("VD_YTDLP_COOKIES_BROWSER", raising=False)
+    monkeypatch.delenv("VD_YTDLP_COOKIES", raising=False)
 
     captured = {}
 
@@ -180,6 +182,7 @@ def test_run_ytdlp_frozen_uses_python_api(monkeypatch, tmp_path):
         "format": "bv*+ba/b",
         "merge_output_format": "mp4",
         "outtmpl": str(dest),
+        "format_sort": ["res", "fps", "tbr"],
     }
     assert captured["urls"] == ["https://www.bilibili.com/video/BVxxxx"]
 

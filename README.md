@@ -211,3 +211,17 @@ M13 把 VideoDistiller 打包为免安装的 Windows 单机版：PyInstaller one
 **其余本轮改动**（视觉/令牌层面，行为不变）：资料库卡片新形态（圆角封面、悬停浮起）；循环与方案表格行卡片化、导出链接改为带图标的紧凑按钮组、「LLM 降级」徽章 tooltip 补充"可点铅笔重命名"的说明；方案编辑器版本行改为纯 CSS 的小圆点+连线时间线；执行台状态徽章补齐图标（不再只靠颜色区分空闲/运行/暂停/错误）、F12 急停提示条常驻可见；全站空态统一为"一句说明 + 一个行动按钮"。
 
 **截图**：`docs/screenshots/` 下 `m5-after-library.png` 等为 M5 时期的升级前界面，予以保留作为历史对照，未删除。本轮计划补拍 4 张 M14 新界面截图（资料库 / 工作台对比模式的视频优先形态 / 推断就绪引导 / 技能目录 pattern 构建器，均 1440×860）——但本环境的浏览器预览面板截图管线拿不到可写入仓库的真实 PNG 字节（只能在对话内联查看），且本轮裁定不为截图新增任何依赖（不引入 Playwright 等）。因此这 4 张新截图本轮未生成，留待用户在本机浏览器手动截取后放入本目录并按上述文件名规范命名。
+
+## M15 · B 站高清拉取（浏览器 cookie + 码率优先排序）
+
+B 站拉取对未登录/低画质默认流更挑剔——这轮让 `pull_bilibili` 能带上浏览器登录态换取高清流，并恒定按码率优先排序选格式，不需要用户改任何操作入口。
+
+- **码率优先排序**：两条执行路径（子进程 `-m yt_dlp` / 冻结态 yt_dlp Python API）都恒定追加 `-S res,fps,tbr`（Python API 对应 `format_sort: ["res", "fps", "tbr"]`），既有的 `-f "bv*+ba/b"` / `--merge-output-format mp4` 参数不动，只是追加，不影响零 cookie 场景下的现状行为。
+- **两个环境变量**（都不设时零 cookie 参数，行为与现状完全一致）：
+  - `VD_YTDLP_COOKIES_BROWSER`：填浏览器名直接读该浏览器的登录 cookie，支持 yt-dlp 的 `浏览器[:profile]` 语法（如 `chrome`、`edge`、`chrome:Default`）。
+  - `VD_YTDLP_COOKIES`：填一个 cookies.txt 文件路径（Netscape 格式），走文件而非浏览器读取。
+  - 两者都设时 **BROWSER 优先，文件被忽略**。
+- **Windows 注意**：Chrome 127+ 的 App-Bound Encryption 会让 `--cookies-from-browser chrome` 在 Windows 上大概率失败（读不到解密后的 cookie）。推荐改用 Firefox 或 Edge（`VD_YTDLP_COOKIES_BROWSER=firefox` / `edge`），或用浏览器扩展导出 cookies.txt 后配 `VD_YTDLP_COOKIES` 指向该文件。
+- **macOS 注意**：Chrome 在 macOS 上可用，首次读取可能弹出一次系统钥匙串授权，允许即可。
+- **旧视频不会自动变清晰**：本功能只影响新的拉取请求，已下载好的旧视频不会被重新处理，需要重新拉取为一条新视频才能拿到高清版；旧视频上已做的标注不会迁移到新视频。
+- **cookie 红线**：代码只把 env 里的浏览器名或文件路径原样传给 yt-dlp（CLI 参数 `--cookies-from-browser` / `--cookies`，或 Python API 对应的 `cookiesfrombrowser` 元组 / `cookiefile`），从不读取 cookie 文件内容、不在日志或报错里打印 cookie 值本体。

@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -61,6 +62,34 @@ def _ytdlp_opts_from_argv(argv: list[str]) -> tuple[dict, str]:
     return opts, url
 
 
+def _ytdlp_quality_args() -> list[str]:
+    """子进程路径（CLI argv）的清晰度/cookie 片段，恒含分辨率优先排序；
+    cookie 两个 env 都未设时零 cookie 参数，行为与现状一致（M15）。"""
+    args = ["-S", "res,fps,tbr"]
+    browser = os.environ.get("VD_YTDLP_COOKIES_BROWSER")
+    if browser:
+        return args + ["--cookies-from-browser", browser]
+    cookies = os.environ.get("VD_YTDLP_COOKIES")
+    if cookies:
+        return args + ["--cookies", cookies]
+    return args
+
+
+def _ytdlp_quality_opts() -> dict:
+    """冻结路径（yt_dlp Python API opts）的等价片段；BROWSER 优先于文件，
+    `浏览器[:profile]` 按 ':' 拆成 yt-dlp 要求的元组语法（M15）。"""
+    opts: dict = {"format_sort": ["res", "fps", "tbr"]}
+    browser = os.environ.get("VD_YTDLP_COOKIES_BROWSER")
+    if browser:
+        name, _, profile = browser.partition(":")
+        opts["cookiesfrombrowser"] = (name, profile) if profile else (name,)
+        return opts
+    cookies = os.environ.get("VD_YTDLP_COOKIES")
+    if cookies:
+        opts["cookiefile"] = cookies
+    return opts
+
+
 def _run_ytdlp(argv: list[str]) -> None:
     """冻结态（PyInstaller 打包后）sys.executable 是打包出的 exe 自身，不能
     再 `-m yt_dlp` 子进程调用自己 —— 改走 yt_dlp Python API，同语义下载；
@@ -69,6 +98,7 @@ def _run_ytdlp(argv: list[str]) -> None:
         import yt_dlp  # 延迟导入：非冻结路径/常规测试不需要，也便于测试 monkeypatch 假模块
 
         opts, url = _ytdlp_opts_from_argv(argv)
+        opts.update(_ytdlp_quality_opts())
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([url])
@@ -83,6 +113,7 @@ def pull_bilibili(url: str, dest: Path, runner=_run_ytdlp) -> Path:
     runner([
         sys.executable, "-m", "yt_dlp",
         "-f", "bv*+ba/b", "--merge-output-format", "mp4",
+        *_ytdlp_quality_args(),
         "-o", str(dest), url,
     ])
     if not dest.exists():

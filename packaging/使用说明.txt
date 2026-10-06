@@ -40,3 +40,29 @@ VideoDistiller Windows 使用说明
 五、如何关闭程序
 run.bat 启动后会保留一个命令行窗口（用于显示运行日志）。关闭该命令行窗口
 即可完全停止程序；直接关闭浏览器标签页不会停止后台服务。
+
+六、B 站高清拉取（可选，更清晰的画质）
+默认未登录拉取时，B 站常只给受限画质。如需更清晰版本，在双击
+run.bat 之前，先在命令提示符里设置下面两个环境变量之一，再从同一个
+命令提示符启动 run.bat：
+
+- set VD_YTDLP_COOKIES_BROWSER=edge
+  直接读取该浏览器已登录的 cookie，拉取你账号能看到的画质。推荐填
+  edge 或 firefox。
+  注意：Chrome 127 及以上版本在 Windows 上启用了 App-Bound
+  Encryption，会导致填 chrome 时读不到 cookie（拉取静默失败或报错）。
+  Windows 上请改用 Firefox/Edge，或用浏览器扩展导出 cookies.txt 后配
+  合下面的 VD_YTDLP_COOKIES。
+
+- set VD_YTDLP_COOKIES=C:\path\to\cookies.txt
+  指向浏览器扩展导出的 cookies.txt 文件（Netscape 格式）。两个变量都
+  设置时，VD_YTDLP_COOKIES_BROWSER 优先，文件会被忽略。
+
+（macOS 上开发调试本项目后端时，Chrome 可正常使用，首次读取会弹出一次
+系统钥匙串授权，允许即可，不受上述限制。）
+
+已下载好的旧视频不会自动变清晰，需要重新拉取为一条新视频才能拿到新
+画质；旧视频上的标注不会迁移到新视频。
+
+本功能不会把 cookie 内容写入日志或界面——只会把你填的浏览器名/文件路径
+原样交给 yt-dlp。
